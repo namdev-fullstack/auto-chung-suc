@@ -1,69 +1,184 @@
-import Image from "next/image";
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createOrder } from '@/lib/orders';
+import { getActiveServices } from '@/lib/services';
+import { Service } from '@/types/database';
 
 export default function Home() {
+  const router = useRouter();
+  const [eventCode, setEventCode] = useState('');
+  const [services, setServices] = useState<Service[]>([]);
+  const [selectedService, setSelectedService] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadingServices, setLoadingServices] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await getActiveServices();
+        setServices(data);
+        if (data.length > 0) {
+          setSelectedService(data[0].id);
+        }
+      } catch (err) {
+        console.error(err);
+        setError('Không tải được danh sách dịch vụ');
+      } finally {
+        setLoadingServices(false);
+      }
+    };
+
+    load();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      if (!eventCode.trim()) {
+        throw new Error('Vui lòng nhập mã sự kiện');
+      }
+
+      const service = services.find((item) => item.id === selectedService);
+      if (!service) {
+        throw new Error('Vui lòng chọn dịch vụ');
+      }
+
+      const order = await createOrder({
+        eventCode: eventCode.trim(),
+        serviceType: selectedService,
+        amount: service.price,
+      });
+
+      const existingOrders = JSON.parse(localStorage.getItem('myOrders') || '[]');
+      existingOrders.push({
+        id: order.id,
+        trackingToken: order.trackingToken,
+        createdAt: new Date().toISOString(),
+      });
+      localStorage.setItem('myOrders', JSON.stringify(existingOrders));
+
+      localStorage.setItem('orderId', order.id);
+      localStorage.setItem('trackingToken', order.trackingToken);
+
+      router.push(`/track/${order.id}`);
+    } catch (err: any) {
+      setError(err.message || 'Đã có lỗi xảy ra');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
+      <div className="max-w-md mx-auto">
+        <div className="bg-white rounded-2xl shadow-xl p-8">
+          <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
+            Chung Sức Liên Quân
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-center text-gray-600 mb-8">
+            Chọn dịch vụ và nhập mã sự kiện để bắt đầu
           </p>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Loại dịch vụ
+              </label>
+              {loadingServices ? (
+                <p className="text-sm text-gray-500">Đang tải dịch vụ...</p>
+              ) : services.length === 0 ? (
+                <p className="text-sm text-gray-500">Hiện chưa có dịch vụ nào đang bán.</p>
+              ) : (
+                <div className="space-y-3">
+                  {services.map((service) => (
+                    <label
+                      key={service.id}
+                      className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                        selectedService === service.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center">
+                        <input
+                          type="radio"
+                          name="service"
+                          value={service.id}
+                          checked={selectedService === service.id}
+                          onChange={(e) => setSelectedService(e.target.value)}
+                          className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="ml-3 font-medium text-gray-900">{service.name}</span>
+                      </div>
+                      <span className="text-lg font-bold text-blue-600">
+                        {service.price.toLocaleString('vi-VN')}đ
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="eventCode" className="block text-sm font-medium text-gray-700 mb-2">
+                Mã sự kiện
+              </label>
+              <input
+                type="text"
+                id="eventCode"
+                value={eventCode}
+                onChange={(e) => setEventCode(e.target.value)}
+                placeholder="Nhập mã sự kiện của bạn"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || loadingServices || services.length === 0}
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? 'Đang tạo đơn...' : 'Tạo đơn'}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center space-y-2">
+            <button
+              onClick={() => {
+                const orderId = localStorage.getItem('orderId');
+                if (orderId) {
+                  router.push(`/track/${orderId}`);
+                } else {
+                  router.push('/track');
+                }
+              }}
+              className="text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Theo dõi đơn hàng của bạn
+            </button>
+            <br />
+            <button
+              onClick={() => router.push('/my-orders')}
+              className="text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Xem tất cả đơn hàng
+            </button>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </div>
     </div>
   );
 }

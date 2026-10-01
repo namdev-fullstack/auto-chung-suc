@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/employees/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/employees/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Helper function to check if user is active employee
+    function isActiveEmployee() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/employees/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/employees/$(request.auth.uid)).data.active == true;
+    }
+    
+    // Helper function to get current employee ID
+    function getCurrentEmployeeId() {
+      return request.auth.uid;
+    }
+    
+    // Employees collection
+    match /employees/{employeeId} {
+      // Only admins can read employees
+      allow read: if isAdmin();
+      
+      // Only admins can create employees
+      allow create: if isAdmin();
+      
+      // Only admins can update employees
+      allow update: if isAdmin();
+      
+      // Only admins can delete employees
+      allow delete: if isAdmin();
+    }
+    
+    // Orders collection
+    match /orders/{orderId} {
+      // Allow read for everyone (customers don't need to login)
+      allow read: if true;
+      
+      // Anyone can create orders (public order creation)
+      allow create: if true;
+      
+      // Updates are restricted - server-side validation through transactions
+      // Only admins can update directly
+      allow update: if isAuthenticated() && isAdmin();
+      
+      // Special case for payment updates via API (with proper validation)
+      allow update: if isAuthenticated() && 
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentStatus', 'paidAt', 'paymentTransactionId', 'paymentContent']) &&
+                     resource.data.paymentStatus == 'unpaid' &&
+                     request.resource.data.paymentStatus == 'paid' &&
+                     request.resource.data.paymentTransactionId != null &&
+                     request.resource.data.paymentTransactionId != resource.data.paymentTransactionId;
+      
+      // Only admins can delete orders
+      allow delete: if isAdmin();
+    }
+    
+    // Allow list queries for authenticated users
+    match /orders {
+      allow list: if isAuthenticated() && (isAdmin() || isActiveEmployee());
+    }
+  }
+}
