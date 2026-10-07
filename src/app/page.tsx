@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createOrder } from '@/lib/orders';
 import { getActiveServices } from '@/lib/services';
 import { Service } from '@/types/database';
+import { IconCheck, IconSearch, Spinner } from '@/components/Icons';
 
 export default function Home() {
   const router = useRouter();
@@ -34,29 +35,34 @@ export default function Home() {
     load();
   }, []);
 
+  const currentSelected = services.find((s) => s.id === selectedService);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const cleanCode = eventCode.trim();
+    if (!cleanCode) {
+      setError('Vui lòng nhập mã sự kiện hoặc dán link sự kiện');
+      return;
+    }
+
+    if (!selectedService || !currentSelected) {
+      setError('Vui lòng chọn một gói dịch vụ');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      if (!eventCode.trim()) {
-        throw new Error('Vui lòng nhập mã sự kiện');
-      }
-
-      const service = services.find((item) => item.id === selectedService);
-      if (!service) {
-        throw new Error('Vui lòng chọn dịch vụ');
-      }
-
       const order = await createOrder({
-        eventCode: eventCode.trim(),
+        eventCode: cleanCode,
         serviceType: selectedService,
-        amount: service.price,
+        amount: currentSelected.price,
       });
 
       const existingOrders = JSON.parse(localStorage.getItem('myOrders') || '[]');
-      existingOrders.push({
+      existingOrders.unshift({
         id: order.id,
         trackingToken: order.trackingToken,
         createdAt: new Date().toISOString(),
@@ -66,97 +72,182 @@ export default function Home() {
       localStorage.setItem('orderId', order.id);
       localStorage.setItem('trackingToken', order.trackingToken);
 
-      router.push(`/track/${order.id}`);
+      // Chuyển sang trang theo dõi và kích hoạt mở modal thanh toán ngay
+      router.push(`/track/${order.id}?pay=1`);
     } catch (err: any) {
-      setError(err.message || 'Đã có lỗi xảy ra');
+      setError(err.message || 'Đã có lỗi xảy ra khi tạo đơn');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
+    <main className="min-h-screen bg-slate-50 py-6 sm:py-12 px-3.5 sm:px-6">
       <div className="max-w-md mx-auto">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
+        {/* Card Header & Brand */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold mb-3 tracking-wide">
+            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+            Hỗ Trợ Sự Kiện Liên Quân Mobile
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
             Chung Sức Liên Quân
           </h1>
-          <p className="text-center text-gray-600 mb-8">
-            Chọn dịch vụ và nhập mã sự kiện để bắt đầu
+          <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-xs mx-auto">
+            Hỗ trợ kéo rương siêu tốc, an toàn, đối soát chuyển khoản nhanh chóng
           </p>
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Form Container */}
+        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 p-5 sm:p-7">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Service Selection */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Loại dịch vụ
-              </label>
+              <div className="flex items-center justify-between mb-2.5">
+                <label className="text-base font-extrabold text-gray-800 flex items-center gap-1.5">
+                  <span>Chọn gói dịch vụ</span>
+                  <span className="text-red-500">*</span>
+                </label>
+                <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                  Giá ưu đãi
+                </span>
+              </div>
+
               {loadingServices ? (
-                <p className="text-sm text-gray-500">Đang tải dịch vụ...</p>
+                <div className="py-8 flex flex-col items-center justify-center text-gray-400 gap-2">
+                  <Spinner className="h-6 w-6 text-blue-600" />
+                  <p className="text-sm">Đang tải bảng giá dịch vụ...</p>
+                </div>
               ) : services.length === 0 ? (
-                <p className="text-sm text-gray-500">Hiện chưa có dịch vụ nào đang bán.</p>
+                <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm text-center">
+                  Hiện chưa có dịch vụ nào đang mở bán. Vui lòng quay lại sau!
+                </div>
               ) : (
-                <div className="space-y-3">
-                  {services.map((service) => (
-                    <label
-                      key={service.id}
-                      className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                        selectedService === service.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex items-center">
-                        <input
-                          type="radio"
-                          name="service"
-                          value={service.id}
-                          checked={selectedService === service.id}
-                          onChange={(e) => setSelectedService(e.target.value)}
-                          className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="ml-3 font-medium text-gray-900">{service.name}</span>
+                <div className="grid grid-cols-1 gap-3">
+                  {services.map((service, index) => {
+                    const isSelected = selectedService === service.id;
+                    const isHot = index === 0;
+
+                    return (
+                      <div
+                        key={service.id}
+                        onClick={() => setSelectedService(service.id)}
+                        className={`relative rounded-2xl p-4 border-2 transition-all cursor-pointer select-none flex items-center justify-between ${
+                          isSelected
+                            ? 'border-blue-600 bg-blue-50/70 shadow-sm shadow-blue-500/15'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3.5">
+                          <div
+                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                              isSelected
+                                ? 'border-blue-600 bg-blue-600 text-white'
+                                : 'border-gray-300 bg-white'
+                            }`}
+                          >
+                            {isSelected && <IconCheck className="h-4 w-4 stroke-[3]" />}
+                          </div>
+
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-base sm:text-lg font-bold ${
+                                  isSelected ? 'text-blue-900' : 'text-gray-900'
+                                }`}
+                              >
+                                {service.name}
+                              </span>
+                              {isHot && (
+                                <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[11px] font-extrabold px-2 py-0.5 rounded-full shadow-xs">
+                                  HOT
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs sm:text-sm text-gray-500">
+                              Hỗ trợ nhận rương nhanh chóng
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span
+                            className={`text-lg sm:text-xl font-extrabold ${
+                              isSelected ? 'text-blue-600' : 'text-gray-900'
+                            }`}
+                          >
+                            {service.price.toLocaleString('vi-VN')}đ
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-lg font-bold text-blue-600">
-                        {service.price.toLocaleString('vi-VN')}đ
-                      </span>
-                    </label>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
 
+            {/* Event Code Input */}
             <div>
-              <label htmlFor="eventCode" className="block text-sm font-medium text-gray-700 mb-2">
-                Mã sự kiện
+              <label
+                htmlFor="eventCode"
+                className="text-base font-extrabold text-gray-800 flex items-center justify-between mb-2"
+              >
+                <span>Mã hoặc link sự kiện</span>
+                <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                id="eventCode"
-                value={eventCode}
-                onChange={(e) => setEventCode(e.target.value)}
-                placeholder="Nhập mã sự kiện của bạn"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  id="eventCode"
+                  value={eventCode}
+                  onChange={(e) => setEventCode(e.target.value)}
+                  placeholder="Dán mã sự kiện hoặc link vào đây"
+                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base font-medium transition-all"
+                  required
+                />
+              </div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-2 leading-relaxed">
+                💡 Vào game, sao chép mã mời hoặc liên kết sự kiện chung sức rồi dán vào đây.
+              </p>
             </div>
 
+            {/* Error Message */}
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium">
                 {error}
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading || loadingServices || services.length === 0}
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? 'Đang tạo đơn...' : 'Tạo đơn'}
-            </button>
+            {/* Submit Button */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={loading || loadingServices || services.length === 0}
+                className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white py-4 px-5 rounded-2xl font-extrabold shadow-lg shadow-blue-500/25 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed text-base sm:text-lg flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Spinner className="h-5 w-5" />
+                    <span>Đang khởi tạo đơn...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Đặt đơn ngay</span>
+                    {currentSelected && (
+                      <span className="bg-white/20 px-2.5 py-0.5 rounded-lg text-sm font-bold">
+                        {currentSelected.price.toLocaleString('vi-VN')}đ
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+            </div>
           </form>
 
-          <div className="mt-6 text-center space-y-2">
+          {/* Quick Links */}
+          <div className="mt-7 pt-5 border-t border-slate-100 flex items-center justify-around text-sm font-bold text-gray-600">
             <button
+              type="button"
               onClick={() => {
                 const orderId = localStorage.getItem('orderId');
                 if (orderId) {
@@ -165,20 +256,29 @@ export default function Home() {
                   router.push('/track');
                 }
               }}
-              className="text-blue-600 hover:text-blue-800 font-medium"
+              className="inline-flex items-center gap-1.5 hover:text-blue-600 transition-colors p-1"
             >
-              Theo dõi đơn hàng của bạn
+              <IconSearch className="h-4 w-4" />
+              <span>Tra cứu đơn hàng</span>
             </button>
-            <br />
+            <span className="text-gray-300">|</span>
             <button
+              type="button"
               onClick={() => router.push('/my-orders')}
-              className="text-blue-600 hover:text-blue-800 font-medium"
+              className="inline-flex items-center gap-1.5 hover:text-blue-600 transition-colors p-1"
             >
-              Xem tất cả đơn hàng
+              <span>Đơn hàng của tôi</span>
             </button>
           </div>
         </div>
+
+        {/* Mobile Safe Notice */}
+        <div className="mt-4 text-center">
+          <p className="text-[11px] text-gray-400">
+            Hệ thống hỗ trợ duyệt đơn và thực hiện 24/7 • Đảm bảo an toàn 100%
+          </p>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

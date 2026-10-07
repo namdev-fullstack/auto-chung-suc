@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Order, CreateOrderInput, UpdateOrderStatusInput, ClaimOrderInput } from '@/types/database';
+import { PaymentStatus } from '@/config/constants';
 
 const ORDERS_COLLECTION = 'orders';
 
@@ -43,6 +44,7 @@ export const createOrder = async (input: CreateOrderInput): Promise<Order> => {
     paidAt: null,
     assignedAt: null,
     completedAt: null,
+    transferConfirmedAt: null,
   };
 
   const docRef = await addDoc(collection(db, ORDERS_COLLECTION), orderData);
@@ -119,6 +121,10 @@ export const claimOrder = async (orderId: string, input: ClaimOrderInput): Promi
       throw new Error('Order is not in pending status');
     }
 
+    if (orderData.paymentStatus !== 'paid') {
+      throw new Error('Đơn hàng chưa được thanh toán hoặc chưa được duyệt thanh toán');
+    }
+
     if (orderData.employeeId !== null) {
       throw new Error('Order is already claimed by another employee');
     }
@@ -151,6 +157,33 @@ export const updateOrderStatus = async (
   }
 
   await updateDoc(doc(db, ORDERS_COLLECTION, orderId), updateData);
+};
+
+export const confirmPaymentTransfer = async (orderId: string): Promise<void> => {
+  const orderRef = doc(db, ORDERS_COLLECTION, orderId);
+  await updateDoc(orderRef, {
+    paymentStatus: 'pending_verification',
+    transferConfirmedAt: serverTimestamp(),
+  });
+};
+
+export const updateOrderPaymentStatus = async (
+  orderId: string,
+  paymentStatus: PaymentStatus
+): Promise<void> => {
+  const orderRef = doc(db, ORDERS_COLLECTION, orderId);
+  const updateData: any = {
+    paymentStatus,
+  };
+
+  if (paymentStatus === 'paid') {
+    updateData.paidAt = serverTimestamp();
+  } else if (paymentStatus === 'unpaid') {
+    updateData.paidAt = null;
+    updateData.paymentTransactionId = null;
+  }
+
+  await updateDoc(orderRef, updateData);
 };
 
 export const processPayment = async (
@@ -192,6 +225,7 @@ export const getOrders = async (filters?: {
   businessDate?: string;
   status?: string;
   serviceType?: string;
+  paymentStatus?: string;
 }): Promise<Order[]> => {
   try {
     let q = query(collection(db, ORDERS_COLLECTION), orderBy('createdAt', 'desc'));
@@ -216,6 +250,10 @@ export const getOrders = async (filters?: {
       q = query(q, where('serviceType', '==', filters.serviceType));
     }
 
+    if (filters?.paymentStatus) {
+      q = query(q, where('paymentStatus', '==', filters.paymentStatus));
+    }
+
     const querySnapshot = await getDocs(q);
     
     return querySnapshot.docs.map((doc) => ({
@@ -223,35 +261,82 @@ export const getOrders = async (filters?: {
       ...doc.data(),
     })) as Order[];
   } catch (error) {
-    console.error('Error in getOrders:', error);
-    return [];
+    console.warn('Index query failed, falling back to client-filtered query:', error);
+    try {
+      const fallbackSnapshot = await getDocs(collection(db, ORDERS_COLLECTION));
+      let list = fallbackSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Order[];
+
+      if (filters?.employeeId) list = list.filter((o) => o.employeeId === filters.employeeId);
+      if (filters?.employeeEmail) list = list.filter((o) => o.employeeEmail === filters.employeeEmail);
+      if (filters?.businessDate) list = list.filter((o) => o.businessDate === filters.businessDate);
+      if (filters?.status) list = list.filter((o) => o.status === filters.status);
+      if (filters?.serviceType) list = list.filter((o) => o.serviceType === filters.serviceType);
+      if (filters?.paymentStatus) list = list.filter((o) => o.paymentStatus === filters.paymentStatus);
+
+      list.sort((a, b) => {
+        const tA = (a.createdAt as any)?.toMillis?.() || (a.createdAt as any)?.seconds * 1000 || 0;
+        const tB = (b.createdAt as any)?.toMillis?.() || (b.createdAt as any)?.seconds * 1000 || 0;
+        return tB - tA;
+      });
+
+      return list;
+    } catch (fallbackErr) {
+      console.error('Error in getOrders fallback:', fallbackErr);
+      return [];
+    }
   }
 };
 
 export const getOrdersForStatistics = async (filters: {
-  businessDate: string;
+  startDate?: string;
+  endDate?: string;
+  businessDate?: string;
   employeeId?: string;
   employeeEmail?: string;
 }): Promise<Order[]> => {
-  let q = query(
-    collection(db, ORDERS_COLLECTION),
-    where('businessDate', '==', filters.businessDate),
-    where('paymentStatus', '==', 'paid'),
-    where('status', '!=', 'cancelled')
-  );
+  try {
+    const snapshot = await getDocs(collection(db, ORDERS_COLLECTION));
+    let list = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Order[];
 
-  if (filters.employeeId) {
-    q = query(q, where('employeeId', '==', filters.employeeId));
+    // Chỉ thống kê các đơn đã thanh toán và không bị hủy
+    list = list.filter((o) => o.paymentStatus === 'paid' && o.status !== 'cancelled');
+
+    if (filters.employeeEmail) {
+      list = list.filter((o) => o.employeeEmail === filters.employeeEmail);
+    }
+
+    if (filters.employeeId) {
+      list = list.filter((o) => o.employeeId === filters.employeeId);
+    }
+
+    if (filters.startDate && filters.endDate) {
+      list = list.filter((o) => {
+        const orderDate =
+          o.businessDate ||
+          ((o.createdAt as any)?.toDate
+            ? (o.createdAt as any).toDate().toISOString().split('T')[0]
+            : '');
+        return orderDate >= filters.startDate! && orderDate <= filters.endDate!;
+      });
+    } else if (filters.businessDate) {
+      list = list.filter((o) => o.businessDate === filters.businessDate);
+    }
+
+    list.sort((a, b) => {
+      const tA = (a.createdAt as any)?.toMillis?.() || (a.createdAt as any)?.seconds * 1000 || 0;
+      const tB = (b.createdAt as any)?.toMillis?.() || (b.createdAt as any)?.seconds * 1000 || 0;
+      return tB - tA;
+    });
+
+    return list;
+  } catch (error) {
+    console.error('Error in getOrdersForStatistics:', error);
+    return [];
   }
-
-  if (filters.employeeEmail) {
-    q = query(q, where('employeeEmail', '==', filters.employeeEmail));
-  }
-
-  const querySnapshot = await getDocs(q);
-  
-  return querySnapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Order[];
 };

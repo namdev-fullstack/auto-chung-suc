@@ -5,7 +5,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { getOrders, getOrdersForStatistics, updateOrderStatus } from '@/lib/orders';
+import { getOrders, getOrdersForStatistics, updateOrderStatus, updateOrderPaymentStatus } from '@/lib/orders';
 import { getAllEmployees, createEmployee, updateEmployee } from '@/lib/employees';
 import {
   createService,
@@ -16,10 +16,13 @@ import {
   updateService,
 } from '@/lib/services';
 import { Order, Employee, Service } from '@/types/database';
-import { ORDER_STATUS } from '@/config/constants';
+import { ORDER_STATUS, PAYMENT_STATUS, PAYMENT_STATUS_LABELS, PaymentStatus } from '@/config/constants';
 import Toast, { ToastType } from '@/components/Toast';
+import CopyButton from '@/components/CopyButton';
+import NotificationBell from '@/components/NotificationBell';
 import {
   IconCheck,
+  IconClock,
   IconEdit,
   IconPlus,
   IconRefresh,
@@ -60,13 +63,35 @@ export default function AdminPage() {
   const [filterDate, setFilterDate] = useState('');
   const [filterEmployee, setFilterEmployee] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState('');
   const [filterService, setFilterService] = useState('');
   const [searchOrderId, setSearchOrderId] = useState('');
 
-  const [statsDate, setStatsDate] = useState(new Date().toISOString().split('T')[0]);
+  const [statsStartDate, setStatsStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [statsEndDate, setStatsEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [statsEmployee, setStatsEmployee] = useState('');
-  const [stats, setStats] = useState<Record<string, number>>({});
   const [showStats, setShowStats] = useState(false);
+  const [statsOrders, setStatsOrders] = useState<Order[]>([]);
+  const [statsSummary, setStatsSummary] = useState({
+    totalRevenue: 0,
+    totalCost: 0,
+    totalProfit: 0,
+    totalOrders: 0,
+  });
+  const [serviceStatsList, setServiceStatsList] = useState<
+    Array<{
+      id: string;
+      name: string;
+      count: number;
+      revenue: number;
+      cost: number;
+      profit: number;
+    }>
+  >([]);
 
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [newEmployee, setNewEmployee] = useState({
@@ -81,12 +106,29 @@ export default function AdminPage() {
   const [serviceForm, setServiceForm] = useState({
     name: '',
     price: 0,
+    costPrice: 0,
     active: true,
   });
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   const showToast = (message: string, type: ToastType) => setToast({ message, type });
+
+  const formatFullTime = (timestamp: any) => {
+    if (!timestamp) return '-';
+    let date: Date;
+    if (typeof timestamp.toDate === 'function') {
+      date = timestamp.toDate();
+    } else if (timestamp.seconds) {
+      date = new Date(timestamp.seconds * 1000);
+    } else {
+      date = new Date(timestamp);
+    }
+    if (Number.isNaN(date.getTime())) return '-';
+    const timeStr = date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dateStr = date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return `${timeStr} ${dateStr}`;
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -137,6 +179,10 @@ export default function AdminPage() {
         filters.status = filterStatus;
       }
 
+      if (filterPaymentStatus) {
+        filters.paymentStatus = filterPaymentStatus;
+      }
+
       if (filterService) {
         filters.serviceType = filterService;
       }
@@ -158,12 +204,14 @@ export default function AdminPage() {
     if (employee) {
       loadOrders();
     }
-  }, [filterDate, filterEmployee, filterStatus, filterService, employee]);
+  }, [filterDate, filterEmployee, filterStatus, filterPaymentStatus, filterService, employee]);
 
   const loadStatistics = async () => {
+    setActionLoading('stats');
     try {
       const filters: any = {
-        businessDate: statsDate,
+        startDate: statsStartDate,
+        endDate: statsEndDate,
       };
 
       if (statsEmployee) {
@@ -171,16 +219,60 @@ export default function AdminPage() {
       }
 
       const ordersData = await getOrdersForStatistics(filters);
-      const statsData: Record<string, number> = {};
+      setStatsOrders(ordersData);
 
-      ordersData.forEach((order) => {
-        statsData[order.serviceType] = (statsData[order.serviceType] || 0) + 1;
+      const costMap: Record<string, number> = {};
+      services.forEach((s) => {
+        costMap[s.id] = s.costPrice || 0;
       });
 
-      setStats(statsData);
+      let totalRev = 0;
+      let totalCost = 0;
+      const perService: Record<string, { count: number; revenue: number; cost: number; profit: number }> = {};
+
+      services.forEach((s) => {
+        perService[s.id] = { count: 0, revenue: 0, cost: 0, profit: 0 };
+      });
+
+      ordersData.forEach((order) => {
+        const amount = order.amount || 0;
+        const unitCost = costMap[order.serviceType] || 0;
+
+        totalRev += amount;
+        totalCost += unitCost;
+
+        if (!perService[order.serviceType]) {
+          perService[order.serviceType] = { count: 0, revenue: 0, cost: 0, profit: 0 };
+        }
+        perService[order.serviceType].count += 1;
+        perService[order.serviceType].revenue += amount;
+        perService[order.serviceType].cost += unitCost;
+        perService[order.serviceType].profit += (amount - unitCost);
+      });
+
+      setStatsSummary({
+        totalRevenue: totalRev,
+        totalCost: totalCost,
+        totalProfit: totalRev - totalCost,
+        totalOrders: ordersData.length,
+      });
+
+      const list = services.map((s) => ({
+        id: s.id,
+        name: s.name,
+        count: perService[s.id]?.count || 0,
+        revenue: perService[s.id]?.revenue || 0,
+        cost: perService[s.id]?.cost || 0,
+        profit: perService[s.id]?.profit || 0,
+      }));
+
+      setServiceStatsList(list);
       setShowStats(true);
     } catch (error) {
       console.error('Error loading statistics:', error);
+      showToast('Lỗi khi tải dữ liệu thống kê', 'error');
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -192,6 +284,19 @@ export default function AdminPage() {
       await loadOrders();
     } catch (error: any) {
       showToast(error.message || 'Không thể cập nhật trạng thái', 'error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleUpdatePaymentStatus = async (orderId: string, paymentStatus: PaymentStatus) => {
+    setActionLoading(`pay-${orderId}`);
+    try {
+      await updateOrderPaymentStatus(orderId, paymentStatus);
+      showToast(`Đã đổi thanh toán: ${PAYMENT_STATUS_LABELS[paymentStatus]}`, 'success');
+      await loadOrders();
+    } catch (error: any) {
+      showToast(error.message || 'Không thể cập nhật trạng thái thanh toán', 'error');
     } finally {
       setActionLoading(null);
     }
@@ -239,7 +344,7 @@ export default function AdminPage() {
 
   const openCreateService = () => {
     setEditingService(null);
-    setServiceForm({ name: '', price: 0, active: true });
+    setServiceForm({ name: '', price: 0, costPrice: 0, active: true });
     setShowServiceForm(true);
   };
 
@@ -248,6 +353,7 @@ export default function AdminPage() {
     setServiceForm({
       name: service.name,
       price: service.price,
+      costPrice: service.costPrice || 0,
       active: service.active,
     });
     setShowServiceForm(true);
@@ -265,6 +371,7 @@ export default function AdminPage() {
         await updateService(editingService.id, {
           name: serviceForm.name.trim(),
           price: Number(serviceForm.price),
+          costPrice: Number(serviceForm.costPrice || 0),
           active: serviceForm.active,
         });
         showToast('Đã cập nhật dịch vụ', 'success');
@@ -272,6 +379,7 @@ export default function AdminPage() {
         await createService({
           name: serviceForm.name.trim(),
           price: Number(serviceForm.price),
+          costPrice: Number(serviceForm.costPrice || 0),
           active: serviceForm.active,
         });
         showToast('Đã thêm dịch vụ', 'success');
@@ -353,8 +461,6 @@ export default function AdminPage() {
     return null;
   }
 
-  const totalOrders = Object.values(stats).reduce((sum, count) => sum + count, 0);
-
   return (
     <div className="min-h-screen bg-gray-50">
       {toast && (
@@ -371,17 +477,24 @@ export default function AdminPage() {
             <div className="flex items-center">
               <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3 sm:space-x-4">
+              <NotificationBell
+                role="admin"
+                onNewOrderAlert={(order, msg) => {
+                  showToast(msg, 'info');
+                  loadOrders();
+                }}
+              />
               <button
                 onClick={() => router.push('/dashboard')}
-                className="text-blue-600 hover:text-blue-800 font-medium"
+                className="text-blue-600 hover:text-blue-800 font-medium text-sm"
               >
                 Employee Dashboard
               </button>
-              <span className="text-gray-700">{employee.name}</span>
+              <span className="text-gray-700 font-medium text-sm">{employee.name}</span>
               <button
                 onClick={handleLogout}
-                className="text-red-600 hover:text-red-800 font-medium"
+                className="text-red-600 hover:text-red-800 font-medium text-sm"
               >
                 Đăng xuất
               </button>
@@ -480,7 +593,7 @@ export default function AdminPage() {
                 <h3 className="text-md font-semibold text-gray-900 mb-3">
                   {editingService ? 'Sửa dịch vụ' : 'Thêm dịch vụ mới'}
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Tên dịch vụ</label>
                     <input
@@ -492,7 +605,7 @@ export default function AdminPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Giá (đ)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Giá bán (đ)</label>
                     <input
                       type="number"
                       min="0"
@@ -501,14 +614,26 @@ export default function AdminPage() {
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
-                  <div className="flex items-end gap-2">
-                    <label className="inline-flex items-center gap-2 text-sm text-gray-700 mb-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Giá vốn / Chi phí (đ)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={serviceForm.costPrice}
+                      onChange={(e) => setServiceForm({ ...serviceForm, costPrice: Number(e.target.value) })}
+                      placeholder="Ví dụ: 10000"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex items-end pb-2">
+                    <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
                       <input
                         type="checkbox"
                         checked={serviceForm.active}
                         onChange={(e) => setServiceForm({ ...serviceForm, active: e.target.checked })}
+                        className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
                       />
-                      Đang bán
+                      Đang mở bán
                     </label>
                   </div>
                 </div>
@@ -539,23 +664,34 @@ export default function AdminPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giá</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giá bán</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giá vốn</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lợi nhuận/đơn</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hành động</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {services.map((service) => (
-                    <tr key={service.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{service.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {service.price.toLocaleString('vi-VN')}đ
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${service.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                          {service.active ? 'Đang bán' : 'Đã ẩn'}
-                        </span>
-                      </td>
+                  {services.map((service) => {
+                    const unitProfit = service.price - (service.costPrice || 0);
+
+                    return (
+                      <tr key={service.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{service.name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                          {service.price.toLocaleString('vi-VN')}đ
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {service.costPrice ? `${service.costPrice.toLocaleString('vi-VN')}đ` : '0đ'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600">
+                          +{unitProfit.toLocaleString('vi-VN')}đ
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${service.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                            {service.active ? 'Đang bán' : 'Đã ẩn'}
+                          </span>
+                        </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center gap-3">
                           <button
@@ -584,10 +720,11 @@ export default function AdminPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                })}
                   {services.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                         Chưa có dịch vụ
                       </td>
                     </tr>
@@ -781,6 +918,22 @@ export default function AdminPage() {
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Thanh toán</label>
+                  <select
+                    value={filterPaymentStatus}
+                    onChange={(e) => {
+                      setFilterPaymentStatus(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Tất cả thanh toán</option>
+                    <option value="unpaid">Chưa thanh toán</option>
+                    <option value="pending_verification">Đợi xác nhận</option>
+                    <option value="paid">Đã thanh toán</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -794,6 +947,7 @@ export default function AdminPage() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dịch vụ</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nhân viên</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thời gian</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thanh toán</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hành động</th>
                     </tr>
@@ -802,16 +956,35 @@ export default function AdminPage() {
                     {sortedDates.map((date) => (
                       <React.Fragment key={date}>
                         <tr className="bg-gray-100">
-                          <td colSpan={7} className="px-6 py-2 text-sm font-semibold text-gray-700">
+                          <td colSpan={8} className="px-6 py-2 text-sm font-semibold text-gray-700">
                             {formatDate(date)}
                           </td>
                         </tr>
                         {groupedCurrentOrders[date].map((order) => (
-                          <tr key={order.id}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.id}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.eventCode}</td>
+                          <tr key={order.id} className="hover:bg-gray-50/80 transition-colors">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono">{order.id}</span>
+                                <CopyButton text={order.id} title="Sao chép mã đơn" />
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              <div className="flex items-center gap-1.5 max-w-xs">
+                                <span className="truncate font-mono" title={order.eventCode}>
+                                  {order.eventCode}
+                                </span>
+                                <CopyButton text={order.eventCode} title="Sao chép mã sự kiện" />
+                              </div>
+                            </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {getServiceLabel(services, order.serviceType)}
+                              <div>
+                                <span className="font-medium text-gray-900">
+                                  {getServiceLabel(services, order.serviceType)}
+                                </span>
+                                <span className="block text-xs text-blue-600 font-semibold">
+                                  {order.amount ? `${order.amount.toLocaleString('vi-VN')}đ` : '-'}
+                                </span>
+                              </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.employeeName || '-'}</td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -819,8 +992,32 @@ export default function AdminPage() {
                                 {STATUS_LABELS[order.status]}
                               </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {order.paymentStatus === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                            <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600">
+                              <div className="flex items-center gap-1">
+                                <IconClock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                <span className="font-mono">{formatFullTime(order.createdAt)}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={order.paymentStatus}
+                                  disabled={actionLoading === `pay-${order.id}`}
+                                  onChange={(e) => handleUpdatePaymentStatus(order.id, e.target.value as PaymentStatus)}
+                                  className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-blue-500 transition-colors ${
+                                    order.paymentStatus === 'paid'
+                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                      : order.paymentStatus === 'pending_verification'
+                                      ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                      : 'bg-red-50 text-red-800 border-red-300'
+                                  }`}
+                                >
+                                  <option value="unpaid">Chưa thanh toán</option>
+                                  <option value="pending_verification">Đợi xác nhận</option>
+                                  <option value="paid">Đã thanh toán</option>
+                                </select>
+                                {actionLoading === `pay-${order.id}` && <Spinner className="h-3.5 w-3.5 text-blue-600" />}
+                              </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                               <div className="flex items-center gap-3">
@@ -852,7 +1049,7 @@ export default function AdminPage() {
                     ))}
                     {filteredOrders.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                        <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
                           Không có đơn hàng
                         </td>
                       </tr>
@@ -912,56 +1109,209 @@ export default function AdminPage() {
         )}
 
         {activeSection === 'statistics' && (
-          <div className="bg-white shadow rounded-lg p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Thống kê đơn hàng</h2>
-            <div className="flex flex-wrap gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày</label>
-                <input
-                  type="date"
-                  value={statsDate}
-                  onChange={(e) => setStatsDate(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nhân viên</label>
-                <select
-                  value={statsEmployee}
-                  onChange={(e) => setStatsEmployee(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Tất cả</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.email}>
-                      {emp.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-end">
-                <button
-                  onClick={loadStatistics}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                >
-                  Xem thống kê
-                </button>
+          <div className="space-y-6">
+            <div className="bg-white shadow rounded-lg p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-1">Thống kê doanh thu & Lợi nhuận</h2>
+              <p className="text-xs text-gray-500 mb-4">
+                Xem tổng tiền bán được, chi phí vốn và lợi nhuận ròng theo khoảng thời gian tùy chọn
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Từ ngày</label>
+                  <input
+                    type="date"
+                    value={statsStartDate}
+                    onChange={(e) => setStatsStartDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Đến ngày</label>
+                  <input
+                    type="date"
+                    value={statsEndDate}
+                    onChange={(e) => setStatsEndDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nhân viên phụ trách</label>
+                  <select
+                    value={statsEmployee}
+                    onChange={(e) => setStatsEmployee(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="">Tất cả nhân viên</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.email}>
+                        {emp.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={loadStatistics}
+                    disabled={actionLoading === 'stats'}
+                    className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60 transition-colors shadow-sm"
+                  >
+                    {actionLoading === 'stats' ? <Spinner className="h-4 w-4" /> : <span>📊</span>}
+                    <span>Xem thống kê</span>
+                  </button>
+                </div>
               </div>
             </div>
 
             {showStats && (
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                {services.map((service) => (
-                  <div key={service.id} className="bg-blue-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-600">{service.name}</p>
-                    <p className="text-2xl font-bold text-blue-600">{stats[service.id] || 0} đơn</p>
+              <>
+                {/* 4 Cards KPI */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Doanh thu */}
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-100 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between text-gray-500 mb-1">
+                        <span className="text-xs font-semibold uppercase tracking-wider">Tổng doanh thu</span>
+                        <span className="p-2 bg-blue-50 text-blue-600 rounded-lg text-sm">💰</span>
+                      </div>
+                      <p className="text-2xl font-extrabold text-blue-600">
+                        {statsSummary.totalRevenue.toLocaleString('vi-VN')}đ
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">Tổng tiền từ đơn đã thanh toán</p>
                   </div>
-                ))}
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Tổng</p>
-                  <p className="text-2xl font-bold text-green-600">{totalOrders} đơn</p>
+
+                  {/* Chi phí vốn */}
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-amber-100 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between text-gray-500 mb-1">
+                        <span className="text-xs font-semibold uppercase tracking-wider">Tổng chi phí vốn</span>
+                        <span className="p-2 bg-amber-50 text-amber-600 rounded-lg text-sm">📦</span>
+                      </div>
+                      <p className="text-2xl font-extrabold text-amber-600">
+                        {statsSummary.totalCost.toLocaleString('vi-VN')}đ
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">Tính theo giá vốn đã cài đặt</p>
+                  </div>
+
+                  {/* Lợi nhuận ròng */}
+                  <div className="bg-gradient-to-br from-emerald-50 to-green-100/60 p-5 rounded-2xl shadow-sm border border-emerald-200 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between text-emerald-800 mb-1">
+                        <span className="text-xs font-bold uppercase tracking-wider">Lợi nhuận ròng</span>
+                        <span className="p-2 bg-emerald-200/60 text-emerald-800 rounded-lg text-sm">🚀</span>
+                      </div>
+                      <p className="text-2xl font-black text-emerald-700">
+                        +{statsSummary.totalProfit.toLocaleString('vi-VN')}đ
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <span className="px-2 py-0.5 bg-emerald-600 text-white rounded text-[11px] font-bold">
+                        {statsSummary.totalRevenue > 0
+                          ? `${((statsSummary.totalProfit / statsSummary.totalRevenue) * 100).toFixed(1)}%`
+                          : '0%'}
+                      </span>
+                      <span className="text-xs text-emerald-800 font-medium">Tỷ suất lợi nhuận</span>
+                    </div>
+                  </div>
+
+                  {/* Số đơn */}
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-purple-100 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between text-gray-500 mb-1">
+                        <span className="text-xs font-semibold uppercase tracking-wider">Đơn hoàn thành</span>
+                        <span className="p-2 bg-purple-50 text-purple-600 rounded-lg text-sm">📋</span>
+                      </div>
+                      <p className="text-2xl font-extrabold text-purple-700">
+                        {statsSummary.totalOrders} đơn
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">Không tính các đơn bị hủy</p>
+                  </div>
                 </div>
-              </div>
+
+                {/* Bảng phân tích chi tiết từng dịch vụ */}
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h3 className="text-md font-bold text-gray-900 mb-3">
+                    Báo cáo chi tiết theo từng loại dịch vụ
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tên dịch vụ</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Số lượng đơn</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Doanh thu</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Chi phí vốn</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Lợi nhuận</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 text-sm">
+                        {serviceStatsList.map((item) => (
+                          <tr key={item.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 font-semibold text-gray-900">{item.name}</td>
+                            <td className="px-4 py-3 text-center font-bold text-blue-600">{item.count}</td>
+                            <td className="px-4 py-3 text-right font-medium text-gray-900">
+                              {item.revenue.toLocaleString('vi-VN')}đ
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-500">
+                              {item.cost.toLocaleString('vi-VN')}đ
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-emerald-600">
+                              +{item.profit.toLocaleString('vi-VN')}đ
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Danh sách đơn hàng trong khoảng thời gian */}
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h3 className="text-md font-bold text-gray-900 mb-3">
+                    Danh sách đơn hàng trong kỳ ({statsOrders.length} đơn)
+                  </h3>
+                  <div className="overflow-x-auto max-h-96">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Mã đơn</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Dịch vụ</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Số tiền</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Thời gian</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Nhân viên</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 text-xs">
+                        {statsOrders.map((ord) => (
+                          <tr key={ord.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-2 font-mono font-bold text-gray-900">{ord.id}</td>
+                            <td className="px-4 py-2 text-gray-700">
+                              {getServiceLabel(services, ord.serviceType)}
+                            </td>
+                            <td className="px-4 py-2 text-right font-bold text-blue-600">
+                              {ord.amount?.toLocaleString('vi-VN')}đ
+                            </td>
+                            <td className="px-4 py-2 text-gray-500 font-mono">
+                              {formatFullTime(ord.createdAt)}
+                            </td>
+                            <td className="px-4 py-2 text-gray-600">{ord.employeeName || '-'}</td>
+                          </tr>
+                        ))}
+                        {statsOrders.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-6 text-center text-gray-500 text-sm">
+                              Không có đơn hàng nào trong khoảng thời gian này
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}

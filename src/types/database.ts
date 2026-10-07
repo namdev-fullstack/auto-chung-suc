@@ -14,6 +14,7 @@ export interface Service {
   id: string;
   name: string;
   price: number;
+  costPrice?: number;
   active: boolean;
   sortOrder: number;
 }
@@ -37,6 +38,7 @@ export interface Order {
   paidAt: Timestamp | null;
   assignedAt: Timestamp | null;
   completedAt: Timestamp | null;
+  transferConfirmedAt?: Timestamp | null;
 }
 
 export interface CreateOrderInput {
@@ -66,6 +68,7 @@ export interface PaymentWebhookInput {
 export interface CreateServiceInput {
   name: string;
   price: number;
+  costPrice?: number;
   active: boolean;
   sortOrder?: number;
 }

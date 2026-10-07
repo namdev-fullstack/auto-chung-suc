@@ -18,6 +18,7 @@ const mapService = (id: string, data: Record<string, unknown>): Service => ({
   id,
   name: String(data.name ?? id),
   price: Number(data.price ?? 0),
+  costPrice: Number(data.costPrice ?? 0),
   active: data.active !== false,
   sortOrder: Number(data.sortOrder ?? 0),
 });
@@ -78,6 +79,7 @@ export const createService = async (input: CreateServiceInput): Promise<Service>
   const payload = {
     name: input.name.trim(),
     price: Number(input.price),
+    costPrice: Number(input.costPrice ?? 0),
     active: input.active,
     sortOrder: input.sortOrder ?? Date.now(),
   };

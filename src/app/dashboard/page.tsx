@@ -11,6 +11,8 @@ import { getServices, getServiceLabel } from '@/lib/services';
 import { Order, Employee, Service } from '@/types/database';
 import { ORDER_STATUS } from '@/config/constants';
 import Toast, { ToastType } from '@/components/Toast';
+import CopyButton from '@/components/CopyButton';
+import NotificationBell from '@/components/NotificationBell';
 import { IconAlert, IconCheck, IconInbox, IconRefresh, IconSearch, Spinner } from '@/components/Icons';
 
 const STATUS_BADGES = {
@@ -100,7 +102,10 @@ export default function DashboardPage() {
 
   const loadOrders = async (employeeEmail: string) => {
     try {
-      let filters: any = {};
+      // Chỉ hiển thị những đơn mà admin đã duyệt là đã thanh toán
+      let filters: any = {
+        paymentStatus: 'paid',
+      };
 
       if (activeTab === 'my') {
         filters.employeeEmail = employeeEmail;
@@ -169,7 +174,7 @@ export default function DashboardPage() {
     setBulkClaiming(true);
     try {
       const pendingOrders = orders
-        .filter((order) => order.status === 'pending')
+        .filter((order) => order.status === 'pending' && order.paymentStatus === 'paid')
         .sort((a, b) => toMillis(a.createdAt) - toMillis(b.createdAt));
 
       const ordersToClaim = pendingOrders.slice(0, bulkClaimCount);
@@ -309,11 +314,28 @@ export default function DashboardPage() {
                 {isAdmin ? 'Admin Dashboard' : 'Employee Dashboard'}
               </h1>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-700">{employee.name}</span>
+            <div className="flex items-center space-x-3 sm:space-x-4">
+              <NotificationBell
+                role="employee"
+                onNewOrderAlert={(order, msg) => {
+                  showToast(msg, 'info');
+                  if (employee) {
+                    loadOrders(employee.email);
+                  }
+                }}
+              />
+              {isAdmin && (
+                <button
+                  onClick={() => router.push('/admin')}
+                  className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                >
+                  Admin Panel
+                </button>
+              )}
+              <span className="text-gray-700 text-sm font-medium">{employee.name}</span>
               <button
                 onClick={handleLogout}
-                className="text-red-600 hover:text-red-800 font-medium"
+                className="text-red-600 hover:text-red-800 font-medium text-sm"
               >
                 Đăng xuất
               </button>
@@ -533,10 +555,18 @@ export default function DashboardPage() {
                             </td>
                           )}
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {order.id}
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono">{order.id}</span>
+                              <CopyButton text={order.id} title="Sao chép mã đơn" />
+                            </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {order.eventCode}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            <div className="flex items-center gap-1.5 max-w-xs">
+                              <span className="truncate font-mono" title={order.eventCode}>
+                                {order.eventCode}
+                              </span>
+                              <CopyButton text={order.eventCode} title="Sao chép mã sự kiện" />
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {getServiceLabel(services, order.serviceType)}
