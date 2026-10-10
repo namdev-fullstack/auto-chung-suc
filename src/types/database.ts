@@ -39,6 +39,9 @@ export interface Order {
   assignedAt: Timestamp | null;
   completedAt: Timestamp | null;
   transferConfirmedAt?: Timestamp | null;
+  copied?: boolean;
+  copiedAt?: Timestamp | null;
+  copiedBy?: string | null;
 }
 
 export interface CreateOrderInput {
@@ -49,7 +52,10 @@ export interface CreateOrderInput {
 
 export interface UpdateOrderStatusInput {
   status: OrderStatus;
-  errorMessage?: string;
+  errorMessage?: string | null;
+  employeeId?: string | null;
+  employeeName?: string | null;
+  employeeEmail?: string | null;
 }
 
 export interface ClaimOrderInput {

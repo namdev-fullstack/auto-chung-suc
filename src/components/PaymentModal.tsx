@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PAYMENT_CONFIG, getSepayQrUrl } from '@/config/constants';
 import { confirmPaymentTransfer } from '@/lib/orders';
 import CopyButton from '@/components/CopyButton';
@@ -26,6 +26,14 @@ export default function PaymentModal({
   const [loading, setLoading] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
+
+  // Mỗi khi mở modal, luôn bắt đầu bằng màn hình thanh toán QR & thông tin chuyển khoản
+  useEffect(() => {
+    if (isOpen) {
+      setConfirmed(false);
+      setError('');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -113,13 +121,22 @@ export default function PaymentModal({
                 </a>
               </div>
 
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-gray-800 py-3 px-4 rounded-xl font-bold text-sm transition-colors"
-              >
-                Đóng & Quay lại chi tiết đơn
-              </button>
+              <div className="space-y-2 pt-1">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-bold text-sm transition-colors shadow-md shadow-blue-500/20"
+                >
+                  Đóng & Quay lại chi tiết đơn
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmed(false)}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-gray-700 py-2.5 px-4 rounded-xl font-semibold text-xs transition-colors"
+                >
+                  Xem lại mã QR & Thông tin chuyển khoản
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -205,6 +222,14 @@ export default function PaymentModal({
                 >
                   {loading ? <Spinner className="h-5 w-5" /> : <IconCheck className="h-5 w-5" />}
                   <span>{loading ? 'Đang xác nhận...' : 'Tôi đã chuyển khoản thành công'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-gray-700 py-2.5 px-4 rounded-xl font-semibold text-sm transition-colors text-center"
+                >
+                  Đóng cửa sổ
                 </button>
 
                 <p className="text-center text-xs sm:text-sm text-gray-500 leading-relaxed">

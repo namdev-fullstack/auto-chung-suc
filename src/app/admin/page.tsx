@@ -5,7 +5,14 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { getOrders, getOrdersForStatistics, updateOrderStatus, updateOrderPaymentStatus } from '@/lib/orders';
+import {
+  getOrders,
+  getOrdersForStatistics,
+  updateOrderStatus,
+  updateOrderPaymentStatus,
+  markOrdersAsCopied,
+  resetOrderCopiedStatus,
+} from '@/lib/orders';
 import { getAllEmployees, createEmployee, updateEmployee } from '@/lib/employees';
 import {
   createService,
@@ -16,13 +23,14 @@ import {
   updateService,
 } from '@/lib/services';
 import { Order, Employee, Service } from '@/types/database';
-import { ORDER_STATUS, PAYMENT_STATUS, PAYMENT_STATUS_LABELS, PaymentStatus } from '@/config/constants';
+import { ORDER_STATUS, PAYMENT_STATUS, PAYMENT_STATUS_LABELS, PaymentStatus, OrderStatus } from '@/config/constants';
 import Toast, { ToastType } from '@/components/Toast';
 import CopyButton from '@/components/CopyButton';
 import NotificationBell from '@/components/NotificationBell';
 import {
   IconCheck,
   IconClock,
+  IconCopy,
   IconEdit,
   IconPlus,
   IconRefresh,
@@ -66,6 +74,8 @@ export default function AdminPage() {
   const [filterPaymentStatus, setFilterPaymentStatus] = useState('');
   const [filterService, setFilterService] = useState('');
   const [searchOrderId, setSearchOrderId] = useState('');
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
   const [statsStartDate, setStatsStartDate] = useState(() => {
     const d = new Date();
@@ -276,11 +286,28 @@ export default function AdminPage() {
     }
   };
 
-  const handleUpdateStatus = async (orderId: string, status: string) => {
-    setActionLoading(`${orderId}-${status}`);
+  const handleUpdateStatus = async (order: Order, newStatus: OrderStatus) => {
+    setActionLoading(`status-${order.id}`);
     try {
-      await updateOrderStatus(orderId, { status: status as any });
-      showToast(status === 'cancelled' ? 'Đã hủy đơn' : 'Đã cập nhật đơn', 'success');
+      const updatePayload: any = {
+        status: newStatus,
+      };
+
+      // Nếu chuyển sang processing hoặc completed và đơn chưa có nhân viên nhận,
+      // tự động gán admin hiện tại nhận đơn
+      if ((newStatus === 'processing' || newStatus === 'completed') && !order.employeeId && employee) {
+        updatePayload.employeeId = employee.id;
+        updatePayload.employeeName = employee.name;
+        updatePayload.employeeEmail = employee.email;
+      } else if (newStatus === 'pending') {
+        // Nếu trả về pending (chờ xử lý), giải phóng nhân viên nhận đơn
+        updatePayload.employeeId = null;
+        updatePayload.employeeName = null;
+        updatePayload.employeeEmail = null;
+      }
+
+      await updateOrderStatus(order.id, updatePayload);
+      showToast(newStatus === 'cancelled' ? 'Đã hủy đơn' : `Đã chuyển sang: ${STATUS_LABELS[newStatus]}`, 'success');
       await loadOrders();
     } catch (error: any) {
       showToast(error.message || 'Không thể cập nhật trạng thái', 'error');
@@ -289,11 +316,24 @@ export default function AdminPage() {
     }
   };
 
-  const handleUpdatePaymentStatus = async (orderId: string, paymentStatus: PaymentStatus) => {
-    setActionLoading(`pay-${orderId}`);
+  const handleUpdatePaymentStatus = async (order: Order, paymentStatus: PaymentStatus) => {
+    setActionLoading(`pay-${order.id}`);
     try {
-      await updateOrderPaymentStatus(orderId, paymentStatus);
-      showToast(`Đã đổi thanh toán: ${PAYMENT_STATUS_LABELS[paymentStatus]}`, 'success');
+      const shouldAutoProcessing = paymentStatus === 'paid' && order.status === 'pending';
+      const employeeData = shouldAutoProcessing && !order.employeeId && employee
+        ? { id: employee.id, name: employee.name, email: employee.email }
+        : null;
+
+      await updateOrderPaymentStatus(order.id, paymentStatus, {
+        autoSetProcessing: shouldAutoProcessing,
+        employee: employeeData,
+      });
+
+      if (shouldAutoProcessing) {
+        showToast('Đã xác nhận thanh toán & tự động chuyển đơn sang Đang làm', 'success');
+      } else {
+        showToast(`Đã đổi thanh toán: ${PAYMENT_STATUS_LABELS[paymentStatus]}`, 'success');
+      }
       await loadOrders();
     } catch (error: any) {
       showToast(error.message || 'Không thể cập nhật trạng thái thanh toán', 'error');
@@ -447,6 +487,124 @@ export default function AdminPage() {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  const handleRowClick = (order: Order, e: React.MouseEvent) => {
+    // Không can thiệp nếu click vào các nút tương tác bên trong (select, button, a, v.v.)
+    const target = e.target as HTMLElement;
+    if (target.closest('select, button, a')) {
+      return;
+    }
+
+    const currentIndex = currentOrders.findIndex((o) => o.id === order.id);
+    if (currentIndex === -1) return;
+
+    if (e.shiftKey && lastSelectedId !== null) {
+      const lastIndex = currentOrders.findIndex((o) => o.id === lastSelectedId);
+      if (lastIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+        const rangeOrders = currentOrders.slice(start, end + 1);
+
+        setSelectedOrderIds((prev) => {
+          const next = new Set(prev);
+          rangeOrders.forEach((o) => next.add(o.id));
+          return next;
+        });
+        setLastSelectedId(order.id);
+        return;
+      }
+    }
+
+    // Click bình thường
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(order.id)) {
+        next.delete(order.id);
+      } else {
+        next.add(order.id);
+      }
+      return next;
+    });
+    setLastSelectedId(order.id);
+  };
+
+  const handleCopyZalo = async () => {
+    if (selectedOrderIds.size === 0) return;
+
+    const selectedList = filteredOrders.filter((o) => selectedOrderIds.has(o.id));
+    if (selectedList.length === 0) return;
+
+    // Cảnh báo nếu trong các đơn được chọn có đơn ĐÃ ĐƯỢC COPY trước đó
+    const alreadyCopiedCount = selectedList.filter((o) => o.copied).length;
+    if (alreadyCopiedCount > 0) {
+      const confirmMsg = `CẢNH BÁO: Trong ${selectedList.length} đơn được chọn, có ${alreadyCopiedCount} đơn ĐÃ ĐƯỢC COPY trước đó.\n\nViệc copy lại có thể khiến nhân viên làm trùng đơn.\n\nBạn có chắc chắn muốn tiếp tục copy không?`;
+      if (!window.confirm(confirmMsg)) {
+        return;
+      }
+    }
+
+    const lines = selectedList.map((o) => {
+      const serviceName = getServiceLabel(services, o.serviceType);
+      return `${o.eventCode.trim()} - ${serviceName}`;
+    });
+
+    const textToCopy = lines.join('\n');
+
+    try {
+      // 1. Chỉ khi copy clipboard thành công mới thực hiện các bước tiếp theo
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = textToCopy;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const success = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (!success) {
+          throw new Error('Clipboard copy failed');
+        }
+      }
+
+      // 2. Lưu trạng thái "Đã copy" bền vững lên Firestore
+      const orderIdsToMark = selectedList.map((o) => o.id);
+      await markOrdersAsCopied(orderIdsToMark, {
+        name: employee?.name || user?.displayName || 'Admin',
+        email: employee?.email || user?.email || '',
+      });
+
+      // 3. Tự động bỏ chọn toàn bộ đơn đang chọn
+      setSelectedOrderIds(new Set());
+      setLastSelectedId(null);
+
+      // 4. Hiển thị thông báo thành công
+      showToast(`Đã copy ${selectedList.length} đơn gửi Zalo`, 'success');
+
+      // 5. Cập nhật lại danh sách đơn hàng
+      await loadOrders();
+    } catch (err: any) {
+      console.error('Lỗi khi copy clipboard hoặc lưu trạng thái:', err);
+      showToast('Sao chép thất bại. Không có thay đổi nào được lưu.', 'error');
+    }
+  };
+
+  const handleResetCopied = async (orderId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm('Đánh dấu đơn này là "Chưa copy" để có thể gửi lại?')) return;
+
+    setActionLoading(`reset-copy-${orderId}`);
+    try {
+      await resetOrderCopiedStatus(orderId);
+      showToast('Đã đánh dấu đơn là Chưa copy', 'success');
+      await loadOrders();
+    } catch (err: any) {
+      showToast(err.message || 'Không thể cập nhật trạng thái', 'error');
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   if (loading) {
@@ -937,14 +1095,72 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {selectedOrderIds.size > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-4 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
+                    <span className="text-sm font-semibold text-blue-900">
+                      Đang chọn <strong className="font-extrabold text-blue-700">{selectedOrderIds.size}</strong> đơn hàng
+                    </span>
+                  </div>
+                  <span className="text-blue-300">|</span>
+                  <button
+                    onClick={() => {
+                      setSelectedOrderIds(new Set());
+                      setLastSelectedId(null);
+                    }}
+                    className="text-xs font-semibold text-blue-700 hover:text-blue-900 underline underline-offset-2 transition-colors"
+                  >
+                    Bỏ chọn tất cả
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCopyZalo}
+                    className="bg-[#0068FF] hover:bg-blue-700 active:scale-[0.99] text-white px-4 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm transition-all"
+                    title="Sao chép danh sách mã sự kiện và tên gói để dán vào Zalo"
+                  >
+                    <IconCopy className="h-4 w-4" />
+                    <span>Copy gửi Zalo ({selectedOrderIds.size})</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white shadow rounded-lg overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th className="w-12 px-4 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            currentOrders.length > 0 &&
+                            currentOrders.every((o) => selectedOrderIds.has(o.id))
+                          }
+                          onChange={() => {
+                            const allSelected = currentOrders.every((o) => selectedOrderIds.has(o.id));
+                            setSelectedOrderIds((prev) => {
+                              const next = new Set(prev);
+                              if (allSelected) {
+                                currentOrders.forEach((o) => next.delete(o.id));
+                              } else {
+                                currentOrders.forEach((o) => next.add(o.id));
+                              }
+                              return next;
+                            });
+                          }}
+                          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                          title="Chọn tất cả đơn trên trang này"
+                        />
+                      </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã đơn</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã sự kiện</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dịch vụ</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gửi Zalo</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nhân viên</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thời gian</th>
@@ -956,16 +1172,37 @@ export default function AdminPage() {
                     {sortedDates.map((date) => (
                       <React.Fragment key={date}>
                         <tr className="bg-gray-100">
-                          <td colSpan={8} className="px-6 py-2 text-sm font-semibold text-gray-700">
+                          <td colSpan={10} className="px-6 py-2 text-sm font-semibold text-gray-700">
                             {formatDate(date)}
                           </td>
                         </tr>
-                        {groupedCurrentOrders[date].map((order) => (
-                          <tr key={order.id} className="hover:bg-gray-50/80 transition-colors">
+                        {groupedCurrentOrders[date].map((order) => {
+                          const isSelected = selectedOrderIds.has(order.id);
+                          return (
+                          <tr
+                            key={order.id}
+                            onClick={(e) => handleRowClick(order, e)}
+                            className={`transition-colors cursor-pointer select-none ${
+                              isSelected
+                                ? 'bg-blue-50/90 hover:bg-blue-100/80 ring-1 ring-inset ring-blue-300'
+                                : 'hover:bg-gray-50/80'
+                            }`}
+                          >
+                            <td className="w-12 px-4 py-4 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer pointer-events-none"
+                              />
+                            </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-mono">{order.id}</span>
-                                <CopyButton text={order.id} title="Sao chép mã đơn" />
+                              <div className="flex items-center gap-1.5" title={`Mã đơn đầy đủ: ${order.id}`}>
+                                <span className="text-gray-400 font-mono text-xs select-none">...</span>
+                                <span className="font-mono font-bold text-gray-800 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-xs shadow-2xs">
+                                  {order.id.slice(-5)}
+                                </span>
+                                <CopyButton text={order.id} title={`Sao chép toàn bộ mã đơn (${order.id})`} />
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
@@ -976,21 +1213,65 @@ export default function AdminPage() {
                                 <CopyButton text={order.eventCode} title="Sao chép mã sự kiện" />
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              <div>
-                                <span className="font-medium text-gray-900">
-                                  {getServiceLabel(services, order.serviceType)}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {getServiceLabel(services, order.serviceType)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              {order.copied ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200"
+                                    title={`Đã copy bởi ${order.copiedBy || 'N/A'}${order.copiedAt ? ` lúc ${formatFullTime(order.copiedAt)}` : ''}`}
+                                  >
+                                    <IconCheck className="h-3 w-3 text-purple-700" />
+                                    Đã copy
+                                  </span>
+                                  <button
+                                    onClick={(e) => handleResetCopied(order.id, e)}
+                                    disabled={actionLoading === `reset-copy-${order.id}`}
+                                    className="text-gray-400 hover:text-red-600 p-1 rounded hover:bg-red-50 text-xs transition-colors"
+                                    title="Đánh dấu lại thành Chưa copy (nếu copy nhầm)"
+                                  >
+                                    {actionLoading === `reset-copy-${order.id}` ? (
+                                      <Spinner className="h-3 w-3 text-red-500" />
+                                    ) : (
+                                      <IconRefresh className="h-3.5 w-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                  Chưa copy
                                 </span>
-                                <span className="block text-xs text-blue-600 font-semibold">
-                                  {order.amount ? `${order.amount.toLocaleString('vi-VN')}đ` : '-'}
-                                </span>
-                              </div>
+                              )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.employeeName || '-'}</td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_BADGES[order.status]}`}>
-                                {STATUS_LABELS[order.status]}
-                              </span>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={order.status}
+                                  disabled={actionLoading === `status-${order.id}`}
+                                  onChange={(e) => handleUpdateStatus(order, e.target.value as OrderStatus)}
+                                  className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-blue-500 transition-colors ${
+                                    order.status === 'completed'
+                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                      : order.status === 'processing'
+                                      ? 'bg-blue-50 text-blue-800 border-blue-300'
+                                      : order.status === 'pending'
+                                      ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                      : order.status === 'error'
+                                      ? 'bg-red-50 text-red-800 border-red-300'
+                                      : 'bg-gray-100 text-gray-800 border-gray-300'
+                                  }`}
+                                >
+                                  {Object.values(ORDER_STATUS).map((status) => (
+                                    <option key={status} value={status}>
+                                      {STATUS_LABELS[status]}
+                                    </option>
+                                  ))}
+                                </select>
+                                {actionLoading === `status-${order.id}` && <Spinner className="h-3.5 w-3.5 text-blue-600" />}
+                              </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600">
                               <div className="flex items-center gap-1">
@@ -1003,7 +1284,7 @@ export default function AdminPage() {
                                 <select
                                   value={order.paymentStatus}
                                   disabled={actionLoading === `pay-${order.id}`}
-                                  onChange={(e) => handleUpdatePaymentStatus(order.id, e.target.value as PaymentStatus)}
+                                  onChange={(e) => handleUpdatePaymentStatus(order, e.target.value as PaymentStatus)}
                                   className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-blue-500 transition-colors ${
                                     order.paymentStatus === 'paid'
                                       ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
@@ -1020,36 +1301,48 @@ export default function AdminPage() {
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2">
+                                {order.status === 'pending' && (
+                                  <button
+                                    onClick={() => handleUpdateStatus(order, 'processing')}
+                                    disabled={actionLoading === `status-${order.id}`}
+                                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-md text-xs font-semibold disabled:opacity-60 inline-flex items-center gap-1"
+                                    title="Admin nhận đơn này để xử lý"
+                                  >
+                                    {actionLoading === `status-${order.id}` ? <Spinner /> : <IconCheck />}
+                                    Nhận đơn
+                                  </button>
+                                )}
                                 {order.status === 'error' && (
                                   <button
-                                    onClick={() => handleUpdateStatus(order.id, 'processing')}
-                                    disabled={actionLoading === `${order.id}-processing`}
-                                    className="text-blue-600 hover:text-blue-900 disabled:opacity-60 inline-flex items-center gap-1"
+                                    onClick={() => handleUpdateStatus(order, 'processing')}
+                                    disabled={actionLoading === `status-${order.id}`}
+                                    className="text-blue-600 hover:text-blue-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold"
                                   >
-                                    {actionLoading === `${order.id}-processing` ? <Spinner /> : <IconRefresh />}
+                                    {actionLoading === `status-${order.id}` ? <Spinner /> : <IconRefresh />}
                                     Reset
                                   </button>
                                 )}
                                 {order.status === 'pending' && (
                                   <button
-                                    onClick={() => handleUpdateStatus(order.id, 'cancelled')}
-                                    disabled={actionLoading === `${order.id}-cancelled`}
-                                    className="text-red-600 hover:text-red-900 disabled:opacity-60 inline-flex items-center gap-1"
+                                    onClick={() => handleUpdateStatus(order, 'cancelled')}
+                                    disabled={actionLoading === `status-${order.id}`}
+                                    className="text-red-600 hover:text-red-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold"
                                   >
-                                    {actionLoading === `${order.id}-cancelled` ? <Spinner /> : <IconX />}
+                                    {actionLoading === `status-${order.id}` ? <Spinner /> : <IconX />}
                                     Hủy
                                   </button>
                                 )}
                               </div>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </React.Fragment>
                     ))}
                     {filteredOrders.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
+                        <td colSpan={10} className="px-6 py-4 text-center text-gray-500">
                           Không có đơn hàng
                         </td>
                       </tr>

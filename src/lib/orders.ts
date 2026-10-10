@@ -10,6 +10,7 @@ import {
   orderBy,
   onSnapshot,
   runTransaction,
+  writeBatch,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
@@ -45,6 +46,9 @@ export const createOrder = async (input: CreateOrderInput): Promise<Order> => {
     assignedAt: null,
     completedAt: null,
     transferConfirmedAt: null,
+    copied: false,
+    copiedAt: null,
+    copiedBy: null,
   };
 
   const docRef = await addDoc(collection(db, ORDERS_COLLECTION), orderData);
@@ -156,6 +160,15 @@ export const updateOrderStatus = async (
     updateData.errorMessage = input.errorMessage;
   }
 
+  if (input.employeeId !== undefined) {
+    updateData.employeeId = input.employeeId;
+    updateData.employeeName = input.employeeName ?? null;
+    updateData.employeeEmail = input.employeeEmail ?? null;
+    if (input.employeeId) {
+      updateData.assignedAt = serverTimestamp();
+    }
+  }
+
   await updateDoc(doc(db, ORDERS_COLLECTION, orderId), updateData);
 };
 
@@ -169,7 +182,11 @@ export const confirmPaymentTransfer = async (orderId: string): Promise<void> => 
 
 export const updateOrderPaymentStatus = async (
   orderId: string,
-  paymentStatus: PaymentStatus
+  paymentStatus: PaymentStatus,
+  options?: {
+    autoSetProcessing?: boolean;
+    employee?: { id: string; name: string; email: string } | null;
+  }
 ): Promise<void> => {
   const orderRef = doc(db, ORDERS_COLLECTION, orderId);
   const updateData: any = {
@@ -178,6 +195,15 @@ export const updateOrderPaymentStatus = async (
 
   if (paymentStatus === 'paid') {
     updateData.paidAt = serverTimestamp();
+    if (options?.autoSetProcessing) {
+      updateData.status = 'processing';
+      if (options.employee) {
+        updateData.employeeId = options.employee.id;
+        updateData.employeeName = options.employee.name;
+        updateData.employeeEmail = options.employee.email;
+        updateData.assignedAt = serverTimestamp();
+      }
+    }
   } else if (paymentStatus === 'unpaid') {
     updateData.paidAt = null;
     updateData.paymentTransactionId = null;
@@ -340,3 +366,33 @@ export const getOrdersForStatistics = async (filters: {
     return [];
   }
 };
+
+export const markOrdersAsCopied = async (
+  orderIds: string[],
+  employeeInfo: { name?: string | null; email?: string | null }
+): Promise<void> => {
+  if (orderIds.length === 0) return;
+  const batch = writeBatch(db);
+  const copiedBy = employeeInfo.name || employeeInfo.email || 'Hệ thống';
+
+  for (const id of orderIds) {
+    const ref = doc(db, ORDERS_COLLECTION, id);
+    batch.update(ref, {
+      copied: true,
+      copiedAt: serverTimestamp(),
+      copiedBy,
+    });
+  }
+
+  await batch.commit();
+};
+
+export const resetOrderCopiedStatus = async (orderId: string): Promise<void> => {
+  const ref = doc(db, ORDERS_COLLECTION, orderId);
+  await updateDoc(ref, {
+    copied: false,
+    copiedAt: null,
+    copiedBy: null,
+  });
+};
+
