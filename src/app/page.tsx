@@ -91,11 +91,9 @@ export default function Home() {
             Hỗ Trợ Sự Kiện Liên Quân Mobile
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
-            Chung Sức Liên Quân
+            Auto Chung Sức - TachiOni
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-xs mx-auto">
-            Hỗ trợ kéo rương siêu tốc, an toàn, đối soát chuyển khoản nhanh chóng
-          </p>
+          
         </div>
 
         {/* Form Container */}
@@ -165,7 +163,7 @@ export default function Home() {
                               )}
                             </div>
                             <span className="text-xs sm:text-sm text-gray-500">
-                              Hỗ trợ nhận rương nhanh chóng
+                              Tặng tới khi Full
                             </span>
                           </div>
                         </div>
@@ -192,7 +190,7 @@ export default function Home() {
                 htmlFor="eventCode"
                 className="text-base font-extrabold text-gray-800 flex items-center justify-between mb-2"
               >
-                <span>Mã hoặc link sự kiện</span>
+                <span>Mã sự kiện</span>
                 <span className="text-red-500">*</span>
               </label>
               <div className="relative">

@@ -1110,7 +1110,7 @@ export default function AdminPage() {
                       setSelectedOrderIds(new Set());
                       setLastSelectedId(null);
                     }}
-                    className="text-xs font-semibold text-blue-700 hover:text-blue-900 underline underline-offset-2 transition-colors"
+                    className="text-xs font-semibold text-blue-700 hover:text-blue-900 underline underline-offset-2 transition-colors p-3 cursor-pointer"
                   >
                     Bỏ chọn tất cả
                   </button>
@@ -1119,11 +1119,11 @@ export default function AdminPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleCopyZalo}
-                    className="bg-[#0068FF] hover:bg-blue-700 active:scale-[0.99] text-white px-4 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm transition-all"
+                    className="cursor-pointer bg-[#0068FF] hover:bg-blue-700 active:scale-[0.99] text-white px-4 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm transition-all"
                     title="Sao chép danh sách mã sự kiện và tên gói để dán vào Zalo"
                   >
                     <IconCopy className="h-4 w-4" />
-                    <span>Copy gửi Zalo ({selectedOrderIds.size})</span>
+                    <span>Copy ({selectedOrderIds.size})</span>
                   </button>
                 </div>
               </div>
@@ -1161,7 +1161,7 @@ export default function AdminPage() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã sự kiện</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dịch vụ</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gửi Zalo</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nhân viên</th>
+                      
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thời gian</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thanh toán</th>
@@ -1245,7 +1245,7 @@ export default function AdminPage() {
                                 </span>
                               )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.employeeName || '-'}</td>
+                           
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
                               <div className="flex items-center gap-1.5">
                                 <select
@@ -1302,17 +1302,7 @@ export default function AdminPage() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                               <div className="flex items-center gap-2">
-                                {order.status === 'pending' && (
-                                  <button
-                                    onClick={() => handleUpdateStatus(order, 'processing')}
-                                    disabled={actionLoading === `status-${order.id}`}
-                                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-md text-xs font-semibold disabled:opacity-60 inline-flex items-center gap-1"
-                                    title="Admin nhận đơn này để xử lý"
-                                  >
-                                    {actionLoading === `status-${order.id}` ? <Spinner /> : <IconCheck />}
-                                    Nhận đơn
-                                  </button>
-                                )}
+                             
                                 {order.status === 'error' && (
                                   <button
                                     onClick={() => handleUpdateStatus(order, 'processing')}

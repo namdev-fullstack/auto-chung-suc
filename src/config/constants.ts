@@ -62,10 +62,8 @@ export type EmployeeRole = (typeof EMPLOYEE_ROLE)[keyof typeof EMPLOYEE_ROLE];
 
 // Cấu hình thanh toán SePay / VietQR
 export const PAYMENT_CONFIG = {
-  BANK_ID: process.env.NEXT_PUBLIC_BANK_ID || 'MB',
-  BANK_NAME: process.env.NEXT_PUBLIC_BANK_NAME || 'MB Bank (Quân Đội)',
-  ACCOUNT_NO: process.env.NEXT_PUBLIC_BANK_ACCOUNT || '0333888999',
-  ACCOUNT_NAME: process.env.NEXT_PUBLIC_BANK_HOLDER || 'NGUYEN VAN A',
+  BANK_ID: process.env.NEXT_PUBLIC_BANK_ID || "VPB", BANK_NAME: process.env.NEXT_PUBLIC_BANK_NAME || "VPBank", ACCOUNT_NO: process.env.NEXT_PUBLIC_BANK_ACCOUNT || "0966216495",
+  ACCOUNT_NAME: process.env.NEXT_PUBLIC_BANK_HOLDER || 'NGUYEN VAN NAM',
   TEMPLATE: process.env.NEXT_PUBLIC_SEPAY_TEMPLATE || 'compact',
 };
 

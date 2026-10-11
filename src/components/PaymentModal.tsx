@@ -37,7 +37,8 @@ export default function PaymentModal({
 
   if (!isOpen) return null;
 
-  const qrUrl = getSepayQrUrl(amount, orderId);
+  const shortId = orderId.slice(-5);
+  const qrUrl = getSepayQrUrl(amount, shortId);
   const zaloUrl = 'https://zalo.me/0966216495';
 
   const handleConfirm = async () => {
@@ -198,9 +199,9 @@ export default function PaymentModal({
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono font-extrabold text-amber-900 text-base sm:text-lg bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-300">
-                      {orderId}
+                      {shortId}
                     </span>
-                    <CopyButton text={orderId} title="Sao chép mã đơn" />
+                    <CopyButton text={shortId} title="Sao chép nội dung chuyển khoản" />
                   </div>
                 </div>
               </div>
