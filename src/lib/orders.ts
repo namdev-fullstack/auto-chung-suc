@@ -16,7 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Order, CreateOrderInput, UpdateOrderStatusInput, ClaimOrderInput } from '@/types/database';
-import { PaymentStatus } from '@/config/constants';
+import { PaymentStatus, OrderStatus } from '@/config/constants';
 
 const ORDERS_COLLECTION = 'orders';
 
@@ -395,4 +395,76 @@ export const resetOrderCopiedStatus = async (orderId: string): Promise<void> => 
     copiedBy: null,
   });
 };
+
+export const batchUpdateOrdersStatus = async (
+  orderIds: string[],
+  status: OrderStatus,
+  employeeInfo?: { id?: string; name?: string; email?: string }
+): Promise<void> => {
+  if (orderIds.length === 0) return;
+  const batch = writeBatch(db);
+
+  for (const id of orderIds) {
+    const ref = doc(db, ORDERS_COLLECTION, id);
+    const updateData: any = {
+      status,
+      updatedAt: serverTimestamp(),
+    };
+    if (status === 'completed') {
+      updateData.completedAt = serverTimestamp();
+    }
+    if ((status === 'processing' || status === 'completed') && employeeInfo?.email) {
+      updateData.employeeId = employeeInfo.id || '';
+      updateData.employeeName = employeeInfo.name || '';
+      updateData.employeeEmail = employeeInfo.email || '';
+      updateData.assignedAt = serverTimestamp();
+    } else if (status === 'pending') {
+      updateData.employeeId = null;
+      updateData.employeeName = null;
+      updateData.employeeEmail = null;
+      updateData.assignedAt = null;
+    }
+    batch.update(ref, updateData);
+  }
+
+  await batch.commit();
+};
+
+export const batchUpdateOrdersPaymentStatus = async (
+  orderIds: string[],
+  paymentStatus: PaymentStatus,
+  options?: {
+    autoSetProcessing?: boolean;
+    employee?: { id: string; name: string; email: string };
+  }
+): Promise<void> => {
+  if (orderIds.length === 0) return;
+  const batch = writeBatch(db);
+
+  for (const id of orderIds) {
+    const ref = doc(db, ORDERS_COLLECTION, id);
+    const updateData: any = {
+      paymentStatus,
+    };
+    if (paymentStatus === 'paid') {
+      updateData.paidAt = serverTimestamp();
+      if (options?.autoSetProcessing) {
+        updateData.status = 'processing';
+        if (options.employee) {
+          updateData.employeeId = options.employee.id;
+          updateData.employeeName = options.employee.name;
+          updateData.employeeEmail = options.employee.email;
+          updateData.assignedAt = serverTimestamp();
+        }
+      }
+    } else if (paymentStatus === 'unpaid') {
+      updateData.paidAt = null;
+      updateData.paymentTransactionId = null;
+    }
+    batch.update(ref, updateData);
+  }
+
+  await batch.commit();
+};
+
 

@@ -12,6 +12,8 @@ import {
   updateOrderPaymentStatus,
   markOrdersAsCopied,
   resetOrderCopiedStatus,
+  batchUpdateOrdersStatus,
+  batchUpdateOrdersPaymentStatus,
 } from '@/lib/orders';
 import { getAllEmployees, createEmployee, updateEmployee } from '@/lib/employees';
 import {
@@ -27,11 +29,14 @@ import { ORDER_STATUS, PAYMENT_STATUS, PAYMENT_STATUS_LABELS, PaymentStatus, Ord
 import Toast, { ToastType } from '@/components/Toast';
 import CopyButton from '@/components/CopyButton';
 import NotificationBell from '@/components/NotificationBell';
+import AdminStatsChart from '@/components/AdminStatsChart';
 import {
   IconCheck,
+  IconChevronDown,
   IconClock,
   IconCopy,
   IconEdit,
+  IconFilter,
   IconPlus,
   IconRefresh,
   IconSearch,
@@ -76,6 +81,19 @@ export default function AdminPage() {
   const [searchOrderId, setSearchOrderId] = useState('');
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showQuickSelectMenu, setShowQuickSelectMenu] = useState(false);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filterDate) count++;
+    if (filterEmployee) count++;
+    if (filterStatus) count++;
+    if (filterPaymentStatus) count++;
+    if (filterService) count++;
+    return count;
+  }, [filterDate, filterEmployee, filterStatus, filterPaymentStatus, filterService]);
 
   const [statsStartDate, setStatsStartDate] = useState(() => {
     const d = new Date();
@@ -215,6 +233,12 @@ export default function AdminPage() {
       loadOrders();
     }
   }, [filterDate, filterEmployee, filterStatus, filterPaymentStatus, filterService, employee]);
+
+  useEffect(() => {
+    if (employee && activeSection === 'statistics' && !showStats) {
+      loadStatistics();
+    }
+  }, [activeSection, employee]);
 
   const loadStatistics = async () => {
     setActionLoading('stats');
@@ -581,7 +605,7 @@ export default function AdminPage() {
       setLastSelectedId(null);
 
       // 4. Hiển thị thông báo thành công
-      showToast(`Đã copy ${selectedList.length} đơn gửi Zalo`, 'success');
+      showToast(`Đã copy ${selectedList.length} đơn`, 'success');
 
       // 5. Cập nhật lại danh sách đơn hàng
       await loadOrders();
@@ -607,6 +631,95 @@ export default function AdminPage() {
     }
   };
 
+  const handleQuickSelect = (type: '5' | '10' | '20' | 'uncopied' | 'all' | 'clear') => {
+    setShowQuickSelectMenu(false);
+    if (type === 'clear') {
+      setSelectedOrderIds(new Set());
+      setLastSelectedId(null);
+      return;
+    }
+    if (type === '5') {
+      const ids = currentOrders.slice(0, 5).map((o) => o.id);
+      setSelectedOrderIds(new Set(ids));
+      return;
+    }
+    if (type === '10') {
+      const ids = currentOrders.slice(0, 10).map((o) => o.id);
+      setSelectedOrderIds(new Set(ids));
+      return;
+    }
+    if (type === '20') {
+      const ids = currentOrders.slice(0, 20).map((o) => o.id);
+      setSelectedOrderIds(new Set(ids));
+      return;
+    }
+    if (type === 'uncopied') {
+      const ids = currentOrders.filter((o) => !o.copied).map((o) => o.id);
+      setSelectedOrderIds(new Set(ids));
+      return;
+    }
+    if (type === 'all') {
+      const ids = currentOrders.map((o) => o.id);
+      setSelectedOrderIds(new Set(ids));
+      return;
+    }
+  };
+
+  const handleBatchUpdateStatus = async (newStatus: OrderStatus) => {
+    if (selectedOrderIds.size === 0) return;
+    const count = selectedOrderIds.size;
+    const statusName = STATUS_LABELS[newStatus] || newStatus;
+
+    if (!window.confirm(`Bạn có chắc muốn đổi trạng thái của ${count} đơn đã chọn thành "${statusName}"?`)) {
+      return;
+    }
+
+    setBulkUpdating(true);
+    try {
+      const ids = Array.from(selectedOrderIds);
+      await batchUpdateOrdersStatus(ids, newStatus, {
+        id: employee?.id,
+        name: employee?.name,
+        email: employee?.email,
+      });
+      showToast(`Đã đổi trạng thái ${count} đơn thành "${statusName}"`, 'success');
+      setSelectedOrderIds(new Set());
+      setLastSelectedId(null);
+      await loadOrders();
+    } catch (err: any) {
+      showToast(err.message || 'Lỗi khi cập nhật trạng thái hàng loạt', 'error');
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const handleBatchUpdatePayment = async (newPayment: PaymentStatus) => {
+    if (selectedOrderIds.size === 0) return;
+    const count = selectedOrderIds.size;
+    const payName = PAYMENT_STATUS_LABELS[newPayment] || newPayment;
+
+    if (!window.confirm(`Bạn có chắc muốn đổi trạng thái thanh toán của ${count} đơn đã chọn thành "${payName}"?`)) {
+      return;
+    }
+
+    setBulkUpdating(true);
+    try {
+      const ids = Array.from(selectedOrderIds);
+      await batchUpdateOrdersPaymentStatus(ids, newPayment, {
+        autoSetProcessing: true,
+        employee: employee ? { id: employee.id, name: employee.name, email: employee.email } : undefined,
+      });
+      showToast(`Đã đổi trạng thái thanh toán ${count} đơn thành "${payName}"`, 'success');
+      setSelectedOrderIds(new Set());
+      setLastSelectedId(null);
+      await loadOrders();
+    } catch (err: any) {
+      showToast(err.message || 'Lỗi khi cập nhật thanh toán hàng loạt', 'error');
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -629,13 +742,18 @@ export default function AdminPage() {
           onClose={() => setToast(null)}
         />
       )}
-      <nav className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
+      <nav className="bg-white shadow-sm border-b sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-14 sm:h-16">
+            <div className="flex items-center gap-2">
+              <h1 className="text-base sm:text-xl font-extrabold text-gray-900 tracking-tight">
+                Admin <span className="hidden sm:inline">Dashboard</span>
+              </h1>
+              <span className="text-[11px] sm:text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                {employee.name}
+              </span>
             </div>
-            <div className="flex items-center space-x-3 sm:space-x-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <NotificationBell
                 role="admin"
                 onNewOrderAlert={(order, msg) => {
@@ -645,14 +763,15 @@ export default function AdminPage() {
               />
               <button
                 onClick={() => router.push('/dashboard')}
-                className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                className="text-blue-600 hover:text-blue-800 font-semibold text-xs sm:text-sm px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors"
+                title="Chuyển sang giao diện nhân viên"
               >
-                Employee Dashboard
+                <span className="hidden sm:inline">Employee Dashboard</span>
+                <span className="sm:hidden">Nhân viên</span>
               </button>
-              <span className="text-gray-700 font-medium text-sm">{employee.name}</span>
               <button
                 onClick={handleLogout}
-                className="text-red-600 hover:text-red-800 font-medium text-sm"
+                className="text-red-600 hover:text-red-800 font-semibold text-xs sm:text-sm px-2 py-1 rounded-lg hover:bg-red-50 transition-colors"
               >
                 Đăng xuất
               </button>
@@ -661,48 +780,48 @@ export default function AdminPage() {
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
-          <div className="flex flex-wrap gap-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+        <div className="mb-4 sm:mb-6">
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar text-xs sm:text-sm">
             <button
               onClick={() => setActiveSection('orders')}
-              className={`px-4 py-2 rounded-lg font-medium ${
+              className={`px-3.5 sm:px-4 py-2 rounded-xl font-bold whitespace-nowrap transition-all shadow-xs ${
                 activeSection === 'orders'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
+                  ? 'bg-blue-600 text-white shadow-blue-500/20'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
               }`}
             >
-              Quản lý đơn hàng
+              📦 Đơn hàng ({orders.length})
             </button>
             <button
               onClick={() => setActiveSection('services')}
-              className={`px-4 py-2 rounded-lg font-medium ${
+              className={`px-3.5 sm:px-4 py-2 rounded-xl font-bold whitespace-nowrap transition-all shadow-xs ${
                 activeSection === 'services'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
+                  ? 'bg-blue-600 text-white shadow-blue-500/20'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
               }`}
             >
-              Quản lý dịch vụ
+              ⚙️ Dịch vụ
             </button>
             <button
               onClick={() => setActiveSection('employees')}
-              className={`px-4 py-2 rounded-lg font-medium ${
+              className={`px-3.5 sm:px-4 py-2 rounded-xl font-bold whitespace-nowrap transition-all shadow-xs ${
                 activeSection === 'employees'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
+                  ? 'bg-blue-600 text-white shadow-blue-500/20'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
               }`}
             >
-              Quản lý nhân viên
+              👥 Nhân viên
             </button>
             <button
               onClick={() => setActiveSection('statistics')}
-              className={`px-4 py-2 rounded-lg font-medium ${
+              className={`px-3.5 sm:px-4 py-2 rounded-xl font-bold whitespace-nowrap transition-all shadow-xs ${
                 activeSection === 'statistics'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
+                  ? 'bg-blue-600 text-white shadow-blue-500/20'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
               }`}
             >
-              Thống kê
+              📊 Thống kê
             </button>
           </div>
         </div>
@@ -1003,138 +1122,302 @@ export default function AdminPage() {
 
         {activeSection === 'orders' && (
           <>
-            <div className="bg-white shadow rounded-lg p-6 mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Bộ lọc</h2>
-              <div className="flex flex-wrap gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Mã đơn</label>
-                  <div className="relative">
-                    <IconSearch className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={searchOrderId}
-                      onChange={(e) => {
-                        setSearchOrderId(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                      placeholder="Tìm theo mã đơn"
-                      className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Ngày</label>
+            {/* Filter & Quick Action Bar */}
+            <div className="bg-white shadow rounded-xl p-3 sm:p-4 mb-4 border border-gray-100 relative">
+              <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+                {/* Search input */}
+                <div className="relative flex-1 min-w-[180px] sm:min-w-[240px]">
+                  <IconSearch className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
-                    type="date"
-                    value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nhân viên</label>
-                  <select
-                    value={filterEmployee}
-                    onChange={(e) => setFilterEmployee(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Tất cả</option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.email}>
-                        {emp.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
-                  <select
-                    value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Tất cả trạng thái</option>
-                    {Object.values(ORDER_STATUS).map((status) => (
-                      <option key={status} value={status}>
-                        {STATUS_LABELS[status]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Dịch vụ</label>
-                  <select
-                    value={filterService}
-                    onChange={(e) => setFilterService(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Tất cả dịch vụ</option>
-                    {services.map((service) => (
-                      <option key={service.id} value={service.id}>
-                        {service.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Thanh toán</label>
-                  <select
-                    value={filterPaymentStatus}
+                    type="text"
+                    value={searchOrderId}
                     onChange={(e) => {
-                      setFilterPaymentStatus(e.target.value);
+                      setSearchOrderId(e.target.value);
                       setCurrentPage(1);
                     }}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Tìm mã đơn hoặc mã SK..."
+                    className="w-full pl-9 pr-7 py-2 bg-slate-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm font-medium"
+                  />
+                  {searchOrderId && (
+                    <button
+                      onClick={() => setSearchOrderId('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Nút bật/tắt bộ lọc chi tiết */}
+                  <button
+                    type="button"
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                      showFilters || activeFiltersCount > 0
+                        ? 'bg-blue-50 text-blue-700 border-blue-300'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                    title="Bật/tắt bộ lọc chi tiết"
                   >
-                    <option value="">Tất cả thanh toán</option>
-                    <option value="unpaid">Chưa thanh toán</option>
-                    <option value="pending_verification">Đợi xác nhận</option>
-                    <option value="paid">Đã thanh toán</option>
-                  </select>
+                    <IconFilter className="h-4 w-4" />
+                    <span>Lọc</span>
+                    {activeFiltersCount > 0 && (
+                      <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-black">
+                        {activeFiltersCount}
+                      </span>
+                    )}
+                    <IconChevronDown className={`h-3.5 w-3.5 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Nút Chọn nhanh nhiều đơn */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickSelectMenu(!showQuickSelectMenu)}
+                      className="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1 transition-colors shadow-2xs cursor-pointer"
+                    >
+                      <span>⚡ Chọn nhanh</span>
+                      <IconChevronDown className="h-3.5 w-3.5 text-gray-500" />
+                    </button>
+
+                    {showQuickSelectMenu && (
+                      <div className="absolute right-0 mt-1.5 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-1 z-30 text-xs font-semibold">
+                        <button
+                          onClick={() => handleQuickSelect('5')}
+                          className="w-full text-left px-3.5 py-2 hover:bg-blue-50 text-gray-700 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                        >
+                          <span>5 đơn gần nhất</span>
+                          <span className="text-gray-400 text-[10px]">Top 5</span>
+                        </button>
+                        <button
+                          onClick={() => handleQuickSelect('10')}
+                          className="w-full text-left px-3.5 py-2 hover:bg-blue-50 text-gray-700 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                        >
+                          <span>10 đơn gần nhất</span>
+                          <span className="text-gray-400 text-[10px]">Top 10</span>
+                        </button>
+                        <button
+                          onClick={() => handleQuickSelect('20')}
+                          className="w-full text-left px-3.5 py-2 hover:bg-blue-50 text-gray-700 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                        >
+                          <span>20 đơn gần nhất</span>
+                          <span className="text-gray-400 text-[10px]">Top 20</span>
+                        </button>
+                        <button
+                          onClick={() => handleQuickSelect('uncopied')}
+                          className="w-full text-left px-3.5 py-2 hover:bg-blue-50 text-purple-700 font-bold border-t border-gray-100 flex items-center justify-between cursor-pointer"
+                        >
+                          <span>Đơn chưa copy</span>
+                          <span className="text-purple-400 text-[10px]">Zalo</span>
+                        </button>
+                        <button
+                          onClick={() => handleQuickSelect('all')}
+                          className="w-full text-left px-3.5 py-2 hover:bg-blue-50 text-gray-700 hover:text-blue-700 cursor-pointer"
+                        >
+                          Chọn tất cả trên trang
+                        </button>
+                        <button
+                          onClick={() => handleQuickSelect('clear')}
+                          className="w-full text-left px-3.5 py-2 hover:bg-red-50 text-red-600 border-t border-gray-100 cursor-pointer"
+                        >
+                          ✕ Bỏ chọn tất cả
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              {/* Bảng bộ lọc có thể thu gọn/mở rộng */}
+              {showFilters && (
+                <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 animate-in fade-in">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Ngày</label>
+                    <input
+                      type="date"
+                      value={filterDate}
+                      onChange={(e) => {
+                        setFilterDate(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Nhân viên</label>
+                    <select
+                      value={filterEmployee}
+                      onChange={(e) => {
+                        setFilterEmployee(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Tất cả</option>
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.email}>
+                          {emp.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Trạng thái</label>
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => {
+                        setFilterStatus(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Tất cả trạng thái</option>
+                      {Object.values(ORDER_STATUS).map((status) => (
+                        <option key={status} value={status}>
+                          {STATUS_LABELS[status]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Dịch vụ</label>
+                    <select
+                      value={filterService}
+                      onChange={(e) => {
+                        setFilterService(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Tất cả dịch vụ</option>
+                      {services.map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {service.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Thanh toán</label>
+                    <select
+                      value={filterPaymentStatus}
+                      onChange={(e) => {
+                        setFilterPaymentStatus(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Tất cả thanh toán</option>
+                      <option value="unpaid">Chưa thanh toán</option>
+                      <option value="pending_verification">Đợi xác nhận</option>
+                      <option value="paid">Đã thanh toán</option>
+                    </select>
+                  </div>
+                  {activeFiltersCount > 0 && (
+                    <div className="col-span-2 sm:col-span-3 lg:col-span-5 flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFilterDate('');
+                          setFilterEmployee('');
+                          setFilterStatus('');
+                          setFilterPaymentStatus('');
+                          setFilterService('');
+                          setCurrentPage(1);
+                        }}
+                        className="text-xs text-red-600 hover:text-red-800 font-semibold underline cursor-pointer"
+                      >
+                        ✕ Xóa toàn bộ bộ lọc
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Thanh thao tác chọn đơn hàng: position absolute ngay dưới ô tìm kiếm, KHÔNG làm khựng/nhảy giao diện */}
+              {selectedOrderIds.size > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-2 z-40 bg-white/95 backdrop-blur-md border-2 border-blue-500 shadow-xl rounded-2xl p-2.5 sm:p-3 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
+                      <span className="text-xs sm:text-sm font-bold text-blue-950">
+                        Đang chọn <strong className="text-blue-600 font-extrabold text-sm sm:text-base">{selectedOrderIds.size}</strong> đơn
+                      </span>
+                      <button
+                        onClick={() => {
+                          setSelectedOrderIds(new Set());
+                          setLastSelectedId(null);
+                        }}
+                        className="text-xs font-semibold text-gray-500 hover:text-red-600 underline ml-1 cursor-pointer"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* Nút copy */}
+                      <button
+                        onClick={handleCopyZalo}
+                        className="cursor-pointer bg-[#0068FF] hover:bg-blue-700 active:scale-[0.99] text-white px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                        title="Sao chép danh sách mã sự kiện và tên gói"
+                      >
+                        <IconCopy className="h-3.5 w-3.5" />
+                        <span>Copy ({selectedOrderIds.size})</span>
+                      </button>
+
+                      {/* Dropdown đổi trạng thái hàng loạt */}
+                      <select
+                        disabled={bulkUpdating}
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          handleBatchUpdateStatus(e.target.value as OrderStatus);
+                          e.target.value = '';
+                        }}
+                        defaultValue=""
+                        className="bg-slate-100 hover:bg-slate-200 text-gray-800 text-xs font-bold px-2 py-1.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
+                      >
+                        <option value="" disabled>
+                          {bulkUpdating ? 'Đang đổi...' : '⚡ Đổi trạng thái...'}
+                        </option>
+                        <option value="processing">Đang làm</option>
+                        <option value="completed">Hoàn thành</option>
+                        <option value="pending">Chờ xử lý</option>
+                        <option value="error">Gặp sự cố</option>
+                        <option value="cancelled">Đã hủy</option>
+                      </select>
+
+                      {/* Dropdown đổi thanh toán hàng loạt */}
+                      <select
+                        disabled={bulkUpdating}
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          handleBatchUpdatePayment(e.target.value as PaymentStatus);
+                          e.target.value = '';
+                        }}
+                        defaultValue=""
+                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold px-2 py-1.5 rounded-xl border border-emerald-300 focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-2xs"
+                      >
+                        <option value="" disabled>
+                          {bulkUpdating ? 'Đang đổi...' : '💳 Đổi thanh toán...'}
+                        </option>
+                        <option value="paid">Đã thanh toán</option>
+                        <option value="pending_verification">Đợi xác nhận</option>
+                        <option value="unpaid">Chưa thanh toán</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {selectedOrderIds.size > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-4 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
-                    <span className="text-sm font-semibold text-blue-900">
-                      Đang chọn <strong className="font-extrabold text-blue-700">{selectedOrderIds.size}</strong> đơn hàng
-                    </span>
-                  </div>
-                  <span className="text-blue-300">|</span>
-                  <button
-                    onClick={() => {
-                      setSelectedOrderIds(new Set());
-                      setLastSelectedId(null);
-                    }}
-                    className="text-xs font-semibold text-blue-700 hover:text-blue-900 underline underline-offset-2 transition-colors p-3 cursor-pointer"
-                  >
-                    Bỏ chọn tất cả
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleCopyZalo}
-                    className="cursor-pointer bg-[#0068FF] hover:bg-blue-700 active:scale-[0.99] text-white px-4 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm transition-all"
-                    title="Sao chép danh sách mã sự kiện và tên gói để dán vào Zalo"
-                  >
-                    <IconCopy className="h-4 w-4" />
-                    <span>Copy ({selectedOrderIds.size})</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-white shadow rounded-lg overflow-hidden">
+            {/* Bảng đơn hàng (Cột Trạng thái đưa lên đầu cạnh Checkbox để nhận biết ngay trên Mobile) */}
+            <div className="bg-white shadow rounded-lg overflow-hidden border border-gray-200">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="min-w-full divide-y divide-gray-200 text-left">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="w-12 px-4 py-3 text-center">
+                      <th className="w-10 px-2 sm:px-4 py-3 text-center">
                         <input
                           type="checkbox"
                           checked={
@@ -1157,183 +1440,212 @@ export default function AdminPage() {
                           title="Chọn tất cả đơn trên trang này"
                         />
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã đơn</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã sự kiện</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dịch vụ</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gửi Zalo</th>
-                      
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thời gian</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thanh toán</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hành động</th>
+                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-bold text-blue-900 bg-blue-50/70 uppercase tracking-wider">
+                        Trạng thái
+                      </th>
+                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Thanh toán
+                      </th>
+                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Mã đơn
+                      </th>
+                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Mã sự kiện
+                      </th>
+                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Dịch vụ
+                      </th>
+                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Gửi Zalo
+                      </th>
+                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Thời gian
+                      </th>
+                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Hành động
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {sortedDates.map((date) => (
                       <React.Fragment key={date}>
-                        <tr className="bg-gray-100">
-                          <td colSpan={10} className="px-6 py-2 text-sm font-semibold text-gray-700">
-                            {formatDate(date)}
+                        <tr className="bg-slate-100/80">
+                          <td colSpan={9} className="px-3 sm:px-6 py-2 text-xs font-bold text-gray-700">
+                            📅 {formatDate(date)}
                           </td>
                         </tr>
                         {groupedCurrentOrders[date].map((order) => {
                           const isSelected = selectedOrderIds.has(order.id);
                           return (
-                          <tr
-                            key={order.id}
-                            onClick={(e) => handleRowClick(order, e)}
-                            className={`transition-colors cursor-pointer select-none ${
-                              isSelected
-                                ? 'bg-blue-50/90 hover:bg-blue-100/80 ring-1 ring-inset ring-blue-300'
-                                : 'hover:bg-gray-50/80'
-                            }`}
-                          >
-                            <td className="w-12 px-4 py-4 text-center">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => {}}
-                                className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer pointer-events-none"
-                              />
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              <div className="flex items-center gap-1.5" title={`Mã đơn đầy đủ: ${order.id}`}>
-                                <span className="text-gray-400 font-mono text-xs select-none">...</span>
-                                <span className="font-mono font-bold text-gray-800 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-xs shadow-2xs">
-                                  {order.id.slice(-5)}
-                                </span>
-                                <CopyButton text={order.id} title={`Sao chép toàn bộ mã đơn (${order.id})`} />
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                              <div className="flex items-center gap-1.5 max-w-xs">
-                                <span className="truncate font-mono" title={order.eventCode}>
-                                  {order.eventCode}
-                                </span>
-                                <CopyButton text={order.eventCode} title="Sao chép mã sự kiện" />
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {getServiceLabel(services, order.serviceType)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              {order.copied ? (
+                            <tr
+                              key={order.id}
+                              onClick={(e) => handleRowClick(order, e)}
+                              className={`transition-colors cursor-pointer select-none ${
+                                isSelected
+                                  ? 'bg-blue-50/90 hover:bg-blue-100/80 ring-1 ring-inset ring-blue-300'
+                                  : 'hover:bg-gray-50/80'
+                              }`}
+                            >
+                              <td className="w-10 px-2 sm:px-4 py-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer pointer-events-none"
+                                />
+                              </td>
+
+                              {/* 1. Cột Trạng thái đặt ở đầu - giúp admin trên mobile nhận biết ngay đơn cần duyệt */}
+                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-sm bg-blue-50/20">
                                 <div className="flex items-center gap-1.5">
-                                  <span
-                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200"
-                                    title={`Đã copy bởi ${order.copiedBy || 'N/A'}${order.copiedAt ? ` lúc ${formatFullTime(order.copiedAt)}` : ''}`}
+                                  <select
+                                    value={order.status}
+                                    disabled={actionLoading === `status-${order.id}`}
+                                    onChange={(e) => handleUpdateStatus(order, e.target.value as OrderStatus)}
+                                    className={`text-xs font-bold px-2 py-1 rounded-lg border cursor-pointer focus:ring-2 focus:ring-blue-500 transition-colors shadow-2xs ${
+                                      order.status === 'completed'
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                        : order.status === 'processing'
+                                        ? 'bg-blue-50 text-blue-800 border-blue-300'
+                                        : order.status === 'pending'
+                                        ? 'bg-amber-100 text-amber-900 border-amber-400 font-extrabold'
+                                        : order.status === 'error'
+                                        ? 'bg-red-50 text-red-800 border-red-300'
+                                        : 'bg-gray-100 text-gray-800 border-gray-300'
+                                    }`}
                                   >
-                                    <IconCheck className="h-3 w-3 text-purple-700" />
-                                    Đã copy
-                                  </span>
-                                  <button
-                                    onClick={(e) => handleResetCopied(order.id, e)}
-                                    disabled={actionLoading === `reset-copy-${order.id}`}
-                                    className="text-gray-400 hover:text-red-600 p-1 rounded hover:bg-red-50 text-xs transition-colors"
-                                    title="Đánh dấu lại thành Chưa copy (nếu copy nhầm)"
-                                  >
-                                    {actionLoading === `reset-copy-${order.id}` ? (
-                                      <Spinner className="h-3 w-3 text-red-500" />
-                                    ) : (
-                                      <IconRefresh className="h-3.5 w-3.5" />
-                                    )}
-                                  </button>
+                                    {Object.values(ORDER_STATUS).map((status) => (
+                                      <option key={status} value={status}>
+                                        {STATUS_LABELS[status]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {actionLoading === `status-${order.id}` && <Spinner className="h-3.5 w-3.5 text-blue-600" />}
                                 </div>
-                              ) : (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">
-                                  Chưa copy
-                                </span>
-                              )}
-                            </td>
-                           
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              <div className="flex items-center gap-1.5">
-                                <select
-                                  value={order.status}
-                                  disabled={actionLoading === `status-${order.id}`}
-                                  onChange={(e) => handleUpdateStatus(order, e.target.value as OrderStatus)}
-                                  className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-blue-500 transition-colors ${
-                                    order.status === 'completed'
-                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                      : order.status === 'processing'
-                                      ? 'bg-blue-50 text-blue-800 border-blue-300'
-                                      : order.status === 'pending'
-                                      ? 'bg-amber-50 text-amber-800 border-amber-300'
-                                      : order.status === 'error'
-                                      ? 'bg-red-50 text-red-800 border-red-300'
-                                      : 'bg-gray-100 text-gray-800 border-gray-300'
-                                  }`}
-                                >
-                                  {Object.values(ORDER_STATUS).map((status) => (
-                                    <option key={status} value={status}>
-                                      {STATUS_LABELS[status]}
-                                    </option>
-                                  ))}
-                                </select>
-                                {actionLoading === `status-${order.id}` && <Spinner className="h-3.5 w-3.5 text-blue-600" />}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600">
-                              <div className="flex items-center gap-1">
-                                <IconClock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                                <span className="font-mono">{formatFullTime(order.createdAt)}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              <div className="flex items-center gap-1.5">
-                                <select
-                                  value={order.paymentStatus}
-                                  disabled={actionLoading === `pay-${order.id}`}
-                                  onChange={(e) => handleUpdatePaymentStatus(order, e.target.value as PaymentStatus)}
-                                  className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border cursor-pointer focus:ring-2 focus:ring-blue-500 transition-colors ${
-                                    order.paymentStatus === 'paid'
-                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                      : order.paymentStatus === 'pending_verification'
-                                      ? 'bg-amber-50 text-amber-800 border-amber-300'
-                                      : 'bg-red-50 text-red-800 border-red-300'
-                                  }`}
-                                >
-                                  <option value="unpaid">Chưa thanh toán</option>
-                                  <option value="pending_verification">Đợi xác nhận</option>
-                                  <option value="paid">Đã thanh toán</option>
-                                </select>
-                                {actionLoading === `pay-${order.id}` && <Spinner className="h-3.5 w-3.5 text-blue-600" />}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              <div className="flex items-center gap-2">
-                             
-                                {order.status === 'error' && (
-                                  <button
-                                    onClick={() => handleUpdateStatus(order, 'processing')}
-                                    disabled={actionLoading === `status-${order.id}`}
-                                    className="text-blue-600 hover:text-blue-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold"
+                              </td>
+
+                              {/* 2. Cột Thanh toán */}
+                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-sm">
+                                <div className="flex items-center gap-1.5">
+                                  <select
+                                    value={order.paymentStatus}
+                                    disabled={actionLoading === `pay-${order.id}`}
+                                    onChange={(e) => handleUpdatePaymentStatus(order, e.target.value as PaymentStatus)}
+                                    className={`text-xs font-bold px-2 py-1 rounded-lg border cursor-pointer focus:ring-2 focus:ring-blue-500 transition-colors shadow-2xs ${
+                                      order.paymentStatus === 'paid'
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                        : order.paymentStatus === 'pending_verification'
+                                        ? 'bg-amber-100 text-amber-900 border-amber-400 font-extrabold'
+                                        : 'bg-red-50 text-red-800 border-red-300'
+                                    }`}
                                   >
-                                    {actionLoading === `status-${order.id}` ? <Spinner /> : <IconRefresh />}
-                                    Reset
-                                  </button>
+                                    <option value="unpaid">Chưa thanh toán</option>
+                                    <option value="pending_verification">Đợi xác nhận</option>
+                                    <option value="paid">Đã thanh toán</option>
+                                  </select>
+                                  {actionLoading === `pay-${order.id}` && <Spinner className="h-3.5 w-3.5 text-blue-600" />}
+                                </div>
+                              </td>
+
+                              {/* 3. Cột Mã đơn */}
+                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
+                                <div className="flex items-center gap-1" title={`Mã đơn đầy đủ: ${order.id}`}>
+                                  <span className="text-gray-400 font-mono text-[10px] select-none">...</span>
+                                  <span className="font-mono font-bold text-gray-800 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-xs shadow-2xs">
+                                    {order.id.slice(-5)}
+                                  </span>
+                                  <CopyButton text={order.id} title={`Sao chép toàn bộ mã đơn (${order.id})`} />
+                                </div>
+                              </td>
+
+                              {/* 4. Cột Mã sự kiện */}
+                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                                <div className="flex items-center gap-1 max-w-[150px] sm:max-w-xs">
+                                  <span className="truncate font-mono text-xs" title={order.eventCode}>
+                                    {order.eventCode}
+                                  </span>
+                                  <CopyButton text={order.eventCode} title="Sao chép mã sự kiện" />
+                                </div>
+                              </td>
+
+                              {/* 5. Cột Dịch vụ */}
+                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm font-semibold text-gray-900">
+                                {getServiceLabel(services, order.serviceType)}
+                              </td>
+
+                              {/* 6. Cột Gửi Zalo */}
+                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs">
+                                {order.copied ? (
+                                  <div className="flex items-center gap-1">
+                                    <span
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-200"
+                                      title={`Đã copy bởi ${order.copiedBy || 'N/A'}${order.copiedAt ? ` lúc ${formatFullTime(order.copiedAt)}` : ''}`}
+                                    >
+                                      <IconCheck className="h-3 w-3 text-purple-700" />
+                                      Đã copy
+                                    </span>
+                                    <button
+                                      onClick={(e) => handleResetCopied(order.id, e)}
+                                      disabled={actionLoading === `reset-copy-${order.id}`}
+                                      className="text-gray-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors"
+                                      title="Đánh dấu lại thành Chưa copy"
+                                    >
+                                      {actionLoading === `reset-copy-${order.id}` ? (
+                                        <Spinner className="h-3 w-3 text-red-500" />
+                                      ) : (
+                                        <IconRefresh className="h-3 w-3" />
+                                      )}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                    Chưa copy
+                                  </span>
                                 )}
-                                {order.status === 'pending' && (
-                                  <button
-                                    onClick={() => handleUpdateStatus(order, 'cancelled')}
-                                    disabled={actionLoading === `status-${order.id}`}
-                                    className="text-red-600 hover:text-red-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold"
-                                  >
-                                    {actionLoading === `status-${order.id}` ? <Spinner /> : <IconX />}
-                                    Hủy
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
+                              </td>
+
+                              {/* 7. Cột Thời gian */}
+                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-[11px] sm:text-xs text-gray-600">
+                                <div className="flex items-center gap-1">
+                                  <IconClock className="h-3 w-3 text-gray-400 shrink-0" />
+                                  <span className="font-mono">{formatFullTime(order.createdAt)}</span>
+                                </div>
+                              </td>
+
+                              {/* 8. Cột Hành động */}
+                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs font-medium">
+                                <div className="flex items-center gap-1.5">
+                                  {order.status === 'error' && (
+                                    <button
+                                      onClick={() => handleUpdateStatus(order, 'processing')}
+                                      disabled={actionLoading === `status-${order.id}`}
+                                      className="text-blue-600 hover:text-blue-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold"
+                                    >
+                                      {actionLoading === `status-${order.id}` ? <Spinner /> : <IconRefresh />}
+                                      Reset
+                                    </button>
+                                  )}
+                                  {order.status === 'pending' && (
+                                    <button
+                                      onClick={() => handleUpdateStatus(order, 'cancelled')}
+                                      disabled={actionLoading === `status-${order.id}`}
+                                      className="text-red-600 hover:text-red-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold"
+                                    >
+                                      {actionLoading === `status-${order.id}` ? <Spinner /> : <IconX />}
+                                      Hủy
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
                           );
                         })}
                       </React.Fragment>
                     ))}
                     {filteredOrders.length === 0 && (
                       <tr>
-                        <td colSpan={10} className="px-6 py-4 text-center text-gray-500">
-                          Không có đơn hàng
+                        <td colSpan={9} className="px-6 py-8 text-center text-gray-500 text-sm">
+                          Không tìm thấy đơn hàng nào phù hợp với bộ lọc
                         </td>
                       </tr>
                     )}
@@ -1513,6 +1825,14 @@ export default function AdminPage() {
                     <p className="text-xs text-gray-400 mt-2">Không tính các đơn bị hủy</p>
                   </div>
                 </div>
+
+                {/* Biểu đồ Doanh thu & Tăng trưởng */}
+                <AdminStatsChart
+                  orders={statsOrders}
+                  startDate={statsStartDate}
+                  endDate={statsEndDate}
+                  services={services}
+                />
 
                 {/* Bảng phân tích chi tiết từng dịch vụ */}
                 <div className="bg-white shadow rounded-lg p-6">
