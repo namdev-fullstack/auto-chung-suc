@@ -1,22 +1,22 @@
 export const DEFAULT_SERVICE_TYPES = [
   {
     id: 'FULL_3_RUONG',
-    name: 'Làm Full 3 Rương',
+    name: 'Full 3 Mốc Quà',
     price: 99000,
   },
   {
     id: 'RUONG_SS',
-    name: 'Rương SS',
+    name: 'Mốc Quà SS',
     price: 60000,
   },
   {
     id: 'RUONG_S_PLUS_PLUS',
-    name: 'Rương S++',
+    name: 'Mốc Quà S++',
     price: 30000,
   },
   {
     id: 'RUONG_S_PLUS',
-    name: 'Rương S+',
+    name: 'Mốc Quà S+',
     price: 15000,
   },
 ];

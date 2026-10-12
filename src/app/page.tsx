@@ -82,46 +82,48 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 py-6 sm:py-12 px-3.5 sm:px-6">
+    <main className="min-h-screen bg-slate-50 py-5 sm:py-10 px-3 sm:px-6">
       <div className="max-w-md mx-auto">
         {/* Card Header & Brand */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold mb-3 tracking-wide">
-            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
-            Hỗ Trợ Sự Kiện Liên Quân Mobile
+        <div className="text-center mb-5">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-[11px] sm:text-xs font-semibold mb-2.5 tracking-wide">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+            Hệ Thống Tương Tác Sự Kiện LQ
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
             Auto Chung Sức - TachiOni
           </h1>
-          
+          <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto leading-relaxed">
+            Hỗ trợ trao đổi liên kết, hoàn thành mốc sự kiện siêu tốc & tự động 24/7
+          </p>
         </div>
 
         {/* Form Container */}
-        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 p-5 sm:p-7">
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 p-4 sm:p-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {/* Service Selection */}
             <div>
-              <div className="flex items-center justify-between mb-2.5">
-                <label className="text-base font-extrabold text-gray-800 flex items-center gap-1.5">
-                  <span>Chọn gói dịch vụ</span>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm sm:text-base font-extrabold text-gray-800 flex items-center gap-1">
+                  <span>Chọn gói hỗ trợ mốc</span>
                   <span className="text-red-500">*</span>
                 </label>
-                <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
-                  Giá ưu đãi
+                <span className="text-[11px] sm:text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 shrink-0">
+                  Tự động 24/7
                 </span>
               </div>
 
               {loadingServices ? (
-                <div className="py-8 flex flex-col items-center justify-center text-gray-400 gap-2">
+                <div className="py-6 flex flex-col items-center justify-center text-gray-400 gap-2">
                   <Spinner className="h-6 w-6 text-blue-600" />
-                  <p className="text-sm">Đang tải bảng giá dịch vụ...</p>
+                  <p className="text-xs sm:text-sm">Đang tải danh sách mốc hỗ trợ...</p>
                 </div>
               ) : services.length === 0 ? (
-                <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-sm text-center">
-                  Hiện chưa có dịch vụ nào đang mở bán. Vui lòng quay lại sau!
+                <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs sm:text-sm text-center">
+                  Hiện chưa có dịch vụ nào đang mở. Vui lòng quay lại sau!
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-3">
+                <div className="grid grid-cols-1 gap-2.5">
                   {services.map((service, index) => {
                     const isSelected = selectedService === service.id;
                     const isHot = index === 0;
@@ -130,47 +132,47 @@ export default function Home() {
                       <div
                         key={service.id}
                         onClick={() => setSelectedService(service.id)}
-                        className={`relative rounded-2xl p-4 border-2 transition-all cursor-pointer select-none flex items-center justify-between ${
+                        className={`relative rounded-xl sm:rounded-2xl p-3 sm:p-3.5 border-2 transition-all cursor-pointer select-none flex items-center justify-between gap-2.5 ${
                           isSelected
-                            ? 'border-blue-600 bg-blue-50/70 shadow-sm shadow-blue-500/15'
+                            ? 'border-blue-600 bg-blue-50/70 shadow-xs'
                             : 'border-slate-200 hover:border-slate-300 bg-white'
                         }`}
                       >
-                        <div className="flex items-center gap-3.5">
+                        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                           <div
-                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
                               isSelected
                                 ? 'border-blue-600 bg-blue-600 text-white'
                                 : 'border-gray-300 bg-white'
                             }`}
                           >
-                            {isSelected && <IconCheck className="h-4 w-4 stroke-[3]" />}
+                            {isSelected && <IconCheck className="h-3 w-3 stroke-[3]" />}
                           </div>
 
-                          <div>
-                            <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span
-                                className={`text-base sm:text-lg font-bold ${
+                                className={`text-sm sm:text-base font-bold leading-tight ${
                                   isSelected ? 'text-blue-900' : 'text-gray-900'
                                 }`}
                               >
                                 {service.name}
                               </span>
                               {isHot && (
-                                <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[11px] font-extrabold px-2 py-0.5 rounded-full shadow-xs">
+                                <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0">
                                   HOT
                                 </span>
                               )}
                             </div>
-                            <span className="text-xs sm:text-sm text-gray-500">
-                              Tặng tới khi Full
+                            <span className="text-[11px] sm:text-xs text-gray-500 block truncate mt-0.5">
+                              Hỗ trợ hoàn thành mốc tương tác
                             </span>
                           </div>
                         </div>
 
-                        <div className="text-right">
+                        <div className="text-right shrink-0">
                           <span
-                            className={`text-lg sm:text-xl font-extrabold ${
+                            className={`text-sm sm:text-base font-extrabold whitespace-nowrap ${
                               isSelected ? 'text-blue-600' : 'text-gray-900'
                             }`}
                           >
@@ -188,9 +190,9 @@ export default function Home() {
             <div>
               <label
                 htmlFor="eventCode"
-                className="text-base font-extrabold text-gray-800 flex items-center justify-between mb-2"
+                className="text-sm sm:text-base font-extrabold text-gray-800 flex items-center justify-between mb-1.5"
               >
-                <span>Mã sự kiện</span>
+                <span>Mã hoặc link sự kiện</span>
                 <span className="text-red-500">*</span>
               </label>
               <div className="relative">
@@ -199,29 +201,29 @@ export default function Home() {
                   id="eventCode"
                   value={eventCode}
                   onChange={(e) => setEventCode(e.target.value)}
-                  placeholder="Dán mã sự kiện hoặc link vào đây"
-                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base font-medium transition-all"
+                  placeholder="Dán mã sự kiện hoặc liên kết vào đây"
+                  className="w-full px-3.5 py-3 sm:py-3.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base font-medium transition-all"
                   required
                 />
               </div>
-              <p className="text-xs sm:text-sm text-gray-500 mt-2 leading-relaxed">
-                💡 Vào game, sao chép mã mời hoặc liên kết sự kiện chung sức rồi dán vào đây.
+              <p className="text-[11px] sm:text-xs text-gray-500 mt-1.5 leading-relaxed">
+                💡 Sao chép mã chia sẻ hoặc liên kết sự kiện từ trang nhiệm vụ rồi dán vào đây.
               </p>
             </div>
 
             {/* Error Message */}
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium">
                 {error}
               </div>
             )}
 
             {/* Submit Button */}
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 type="submit"
                 disabled={loading || loadingServices || services.length === 0}
-                className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white py-4 px-5 rounded-2xl font-extrabold shadow-lg shadow-blue-500/25 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed text-base sm:text-lg flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white py-3.5 sm:py-4 px-4 rounded-xl sm:rounded-2xl font-extrabold shadow-lg shadow-blue-500/25 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed text-base flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
@@ -230,9 +232,9 @@ export default function Home() {
                   </>
                 ) : (
                   <>
-                    <span>Đặt đơn ngay</span>
+                    <span>Xác nhận đặt đơn</span>
                     {currentSelected && (
-                      <span className="bg-white/20 px-2.5 py-0.5 rounded-lg text-sm font-bold">
+                      <span className="bg-white/20 px-2 py-0.5 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap">
                         {currentSelected.price.toLocaleString('vi-VN')}đ
                       </span>
                     )}
@@ -243,7 +245,7 @@ export default function Home() {
           </form>
 
           {/* Quick Links */}
-          <div className="mt-7 pt-5 border-t border-slate-100 flex items-center justify-around text-sm font-bold text-gray-600">
+          <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-around text-xs sm:text-sm font-bold text-gray-600">
             <button
               type="button"
               onClick={() => {
@@ -256,7 +258,7 @@ export default function Home() {
               }}
               className="inline-flex items-center gap-1.5 hover:text-blue-600 transition-colors p-1"
             >
-              <IconSearch className="h-4 w-4" />
+              <IconSearch className="h-4 w-4 shrink-0" />
               <span>Tra cứu đơn hàng</span>
             </button>
             <span className="text-gray-300">|</span>
@@ -271,9 +273,9 @@ export default function Home() {
         </div>
 
         {/* Mobile Safe Notice */}
-        <div className="mt-4 text-center">
+        <div className="mt-3.5 text-center">
           <p className="text-[11px] text-gray-400">
-            Hệ thống hỗ trợ duyệt đơn và thực hiện 24/7 • Đảm bảo an toàn 100%
+            Hệ thống hỗ trợ trao đổi tương tác 24/7 • Đảm bảo an toàn 100%
           </p>
         </div>
       </div>

@@ -30,27 +30,27 @@ export default function MyOrdersPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 py-6 sm:py-12 px-3.5 sm:px-6">
+    <main className="min-h-screen bg-slate-50 py-5 sm:py-10 px-3 sm:px-6">
       <div className="max-w-md mx-auto">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3.5">
           <button
             onClick={() => router.push('/')}
-            className="text-xs font-semibold text-gray-500 hover:text-blue-600 inline-flex items-center gap-1 p-1"
+            className="text-xs sm:text-sm font-semibold text-gray-500 hover:text-blue-600 inline-flex items-center gap-1 p-1"
           >
             ← Trang chủ
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 p-5 sm:p-7">
+        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 p-4 sm:p-6">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 text-center">
             Đơn hàng đã lưu
           </h1>
-          <p className="text-xs text-gray-500 mb-6 text-center">
+          <p className="text-xs text-gray-500 mb-5 text-center">
             Danh sách các đơn hàng đã đặt trên thiết bị này
           </p>
 
           {orders.length === 0 ? (
-            <div className="text-center py-8 bg-slate-50 rounded-2xl p-6 border border-dashed border-slate-200">
+            <div className="text-center py-8 bg-slate-50 rounded-2xl p-5 border border-dashed border-slate-200">
               <p className="text-xs text-gray-500 mb-4">Bạn chưa lưu đơn hàng nào trên trình duyệt này.</p>
               <button
                 onClick={() => router.push('/')}
@@ -60,20 +60,20 @@ export default function MyOrdersPage() {
               </button>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {orders.map((order) => (
                 <div
                   key={order.id}
-                  className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 hover:border-slate-300 transition-colors flex items-center justify-between gap-2"
+                  className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/80 hover:border-slate-300 transition-colors flex items-center justify-between gap-2"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1">
-                      <span className="font-mono font-bold text-gray-900 text-xs sm:text-sm truncate">
-                        {order.id}
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-gray-800 text-xs sm:text-sm bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title={order.id}>
+                        ...{order.id.slice(-5)}
                       </span>
-                      <CopyButton text={order.id} title="Sao chép mã đơn" />
+                      <CopyButton text={order.id} title="Sao chép toàn bộ mã đơn" />
                     </div>
-                    <p className="text-[11px] text-gray-400 mt-0.5">
+                    <p className="text-[11px] text-gray-400 mt-1">
                       {new Date(order.createdAt).toLocaleString('vi-VN')}
                     </p>
                   </div>

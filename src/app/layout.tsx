@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 import ZaloWidget from "@/components/ZaloWidget";
 
 export const metadata: Metadata = {
-  title: "Chung Sức Liên Quân - Kéo Rương Nhanh & Uy Tín",
-  description: "Hỗ trợ sự kiện Chung Sức Liên Quân Mobile 24/7, kéo rương nhanh chóng, an toàn.",
+  title: "Auto Chung Sức - Hỗ Trợ Tương Tác Sự Kiện TachiOni",
+  description: "Hệ thống hỗ trợ trao đổi liên kết và tương tác sự kiện Chung Sức 24/7, an toàn và nhanh chóng.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

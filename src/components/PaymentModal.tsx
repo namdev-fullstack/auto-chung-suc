@@ -59,25 +59,25 @@ export default function PaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
       <div
-        className="bg-white w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh] border border-gray-100"
+        className="bg-white w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-gray-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-5 py-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white flex justify-between items-center relative">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md">
-              <IconQrCode className="h-5 w-5 text-white" />
+        <div className="px-4 py-3 sm:px-5 sm:py-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white flex justify-between items-center relative">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 sm:p-2 bg-white/10 rounded-xl backdrop-blur-md">
+              <IconQrCode className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
             <div>
-              <h3 className="font-bold text-base sm:text-lg leading-tight">Thanh toán chuyển khoản</h3>
-              <p className="text-xs sm:text-sm text-blue-100 mt-0.5">Quét mã QR qua ứng dụng ngân hàng</p>
+              <h3 className="font-bold text-sm sm:text-lg leading-tight">Thanh toán chuyển khoản</h3>
+              <p className="text-[11px] sm:text-xs text-blue-100 mt-0.5">Quét mã QR qua ứng dụng ngân hàng</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors"
             aria-label="Đóng"
           >
             <IconX className="h-5 w-5" />
@@ -85,7 +85,7 @@ export default function PaymentModal({
         </div>
 
         {/* Content */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+        <div className="p-3.5 sm:p-5 overflow-y-auto space-y-3 sm:space-y-4">
           {confirmed ? (
             <div className="py-4 text-center space-y-4 animate-in fade-in zoom-in-95">
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-3xl font-bold shadow-md shadow-emerald-500/20">
@@ -142,46 +142,46 @@ export default function PaymentModal({
           ) : (
             <>
               {/* QR Code Container */}
-              <div className="flex flex-col items-center justify-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <div className="relative bg-white p-2.5 rounded-xl shadow-sm border border-slate-200">
+              <div className="flex flex-col items-center justify-center bg-slate-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200">
+                <div className="relative bg-white p-2 rounded-xl shadow-xs border border-slate-200">
                   <img
                     src={qrUrl}
                     alt={`Mã QR thanh toán cho đơn ${orderId}`}
-                    className="w-56 h-56 sm:w-60 sm:h-60 object-contain rounded-lg"
+                    className="w-44 h-44 sm:w-56 sm:h-56 object-contain rounded-lg"
                     loading="eager"
                   />
                 </div>
-                <p className="text-xs sm:text-sm text-gray-500 mt-2.5 text-center font-medium">
+                <p className="text-[11px] sm:text-xs text-gray-500 mt-2 text-center font-medium">
                   Mở ứng dụng ngân hàng bất kỳ để quét mã QR
                 </p>
               </div>
 
               {/* Thông tin chuyển khoản */}
-              <div className="bg-blue-50/70 rounded-2xl p-4 border border-blue-100 space-y-3 text-sm sm:text-base">
-                <div className="flex justify-between items-center py-1 border-b border-blue-100">
-                  <span className="text-gray-600 text-xs sm:text-sm">Ngân hàng:</span>
-                  <span className="font-bold text-gray-900 text-right">{PAYMENT_CONFIG.BANK_NAME}</span>
+              <div className="bg-blue-50/70 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-blue-100 space-y-2 sm:space-y-2.5 text-xs sm:text-sm">
+                <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
+                  <span className="text-gray-500 shrink-0">Ngân hàng:</span>
+                  <span className="font-bold text-gray-900 text-right truncate">{PAYMENT_CONFIG.BANK_NAME}</span>
                 </div>
 
-                <div className="flex justify-between items-center py-1 border-b border-blue-100">
-                  <span className="text-gray-600 text-xs sm:text-sm">Số tài khoản:</span>
+                <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
+                  <span className="text-gray-500 shrink-0">Số tài khoản:</span>
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-extrabold text-blue-700 text-base sm:text-lg">
+                    <span className="font-mono font-extrabold text-blue-700 text-sm sm:text-base">
                       {PAYMENT_CONFIG.ACCOUNT_NO}
                     </span>
                     <CopyButton text={PAYMENT_CONFIG.ACCOUNT_NO} title="Sao chép số tài khoản" />
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center py-1 border-b border-blue-100">
-                  <span className="text-gray-600 text-xs sm:text-sm">Chủ tài khoản:</span>
-                  <span className="font-bold text-gray-900 uppercase text-xs sm:text-sm">
+                <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
+                  <span className="text-gray-500 shrink-0">Chủ tài khoản:</span>
+                  <span className="font-bold text-gray-900 uppercase text-xs sm:text-sm text-right truncate">
                     {PAYMENT_CONFIG.ACCOUNT_NAME}
                   </span>
                 </div>
 
-                <div className="flex justify-between items-center py-1 border-b border-blue-100">
-                  <span className="text-gray-600 text-xs sm:text-sm">Số tiền:</span>
+                <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
+                  <span className="text-gray-500 shrink-0">Số tiền:</span>
                   <div className="flex items-center gap-1.5">
                     <span className="font-extrabold text-emerald-600 text-base sm:text-lg">
                       {amount.toLocaleString('vi-VN')}đ
@@ -190,15 +190,15 @@ export default function PaymentModal({
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center py-2 bg-amber-50 -mx-2 px-3 rounded-xl border border-amber-200">
-                  <div className="flex flex-col">
+                <div className="flex justify-between items-center py-2 bg-amber-50 -mx-1 px-2.5 rounded-lg border border-amber-200 gap-2">
+                  <div className="flex flex-col min-w-0">
                     <span className="text-amber-900 text-xs sm:text-sm font-bold">Nội dung chuyển khoản:</span>
-                    <span className="text-[11px] sm:text-xs text-amber-700 font-medium">
-                      (Bắt buộc ghi đúng để kiểm tra nhanh)
+                    <span className="text-[10px] sm:text-xs text-amber-700 font-medium">
+                      (Bắt buộc ghi đúng 5 ký tự này)
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-extrabold text-amber-900 text-base sm:text-lg bg-amber-100 px-2 py-0.5 rounded-lg border border-amber-300">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="font-mono font-extrabold text-amber-900 text-base sm:text-lg bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
                       {shortId}
                     </span>
                     <CopyButton text={shortId} title="Sao chép nội dung chuyển khoản" />
@@ -207,19 +207,19 @@ export default function PaymentModal({
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-2">
+                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2">
                   <IconAlert className="h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
               {/* Hướng dẫn và nút xác nhận */}
-              <div className="pt-1 space-y-2.5">
+              <div className="pt-1 space-y-2">
                 <button
                   type="button"
                   onClick={handleConfirm}
                   disabled={loading}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white py-3.5 px-4 rounded-2xl font-bold shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-60 text-base sm:text-lg active:scale-[0.99]"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white py-3 sm:py-3.5 px-4 rounded-xl sm:rounded-2xl font-bold shadow-md shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 disabled:opacity-60 text-sm sm:text-base active:scale-[0.99]"
                 >
                   {loading ? <Spinner className="h-5 w-5" /> : <IconCheck className="h-5 w-5" />}
                   <span>{loading ? 'Đang xác nhận...' : 'Tôi đã chuyển khoản thành công'}</span>
@@ -228,12 +228,12 @@ export default function PaymentModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="w-full bg-slate-100 hover:bg-slate-200 text-gray-700 py-2.5 px-4 rounded-xl font-semibold text-sm transition-colors text-center"
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-gray-700 py-2 sm:py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm transition-colors text-center"
                 >
                   Đóng cửa sổ
                 </button>
 
-                <p className="text-center text-xs sm:text-sm text-gray-500 leading-relaxed">
+                <p className="text-center text-[11px] sm:text-xs text-gray-500 leading-relaxed">
                   Sau khi bạn chuyển tiền xong, bấm nút trên để hệ thống ghi nhận và nhân viên duyệt đơn!
                 </p>
               </div>

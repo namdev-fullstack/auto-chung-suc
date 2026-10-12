@@ -48,18 +48,18 @@ export default function TrackPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 py-6 sm:py-12 px-3.5 sm:px-6">
+    <main className="min-h-screen bg-slate-50 py-5 sm:py-10 px-3 sm:px-6">
       <div className="max-w-md mx-auto">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3.5">
           <button
             onClick={() => router.push('/')}
-            className="text-xs font-semibold text-gray-500 hover:text-blue-600 inline-flex items-center gap-1 p-1"
+            className="text-xs sm:text-sm font-semibold text-gray-500 hover:text-blue-600 inline-flex items-center gap-1 p-1"
           >
             ← Trang chủ
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 p-5 sm:p-7">
+        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 p-4 sm:p-6">
           <h1 className="text-xl sm:text-2xl font-bold text-center text-gray-900 mb-1">
             Tra cứu đơn hàng
           </h1>

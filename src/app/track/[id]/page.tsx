@@ -21,7 +21,7 @@ const STATUS_BADGES = {
 
 const STATUS_LABELS = {
   pending: 'Chờ xử lý',
-  processing: 'Đang làm',
+  processing: 'Đang thực hiện',
   completed: 'Hoàn thành',
   error: 'Gặp sự cố',
   cancelled: 'Đã hủy',
@@ -105,7 +105,7 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
   const servicePrice = order.amount || service?.price || 0;
 
   return (
-    <main className="min-h-screen bg-slate-50 py-6 sm:py-10 px-3.5 sm:px-6">
+    <main className="min-h-screen bg-slate-50 py-5 sm:py-10 px-3 sm:px-6">
       {toast && (
         <Toast
           message={toast.message}
@@ -116,16 +116,16 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
 
       <div className="max-w-md mx-auto">
         {/* Header Navigation */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3.5">
           <button
             onClick={() => router.push('/')}
-            className="text-sm font-bold text-gray-600 hover:text-blue-600 inline-flex items-center gap-1.5 p-1"
+            className="text-xs sm:text-sm font-bold text-gray-600 hover:text-blue-600 inline-flex items-center gap-1.5 p-1"
           >
             ← Trang chủ
           </button>
           <button
             onClick={() => router.push('/my-orders')}
-            className="text-sm font-bold text-blue-600 hover:text-blue-800 p-1"
+            className="text-xs sm:text-sm font-bold text-blue-600 hover:text-blue-800 p-1"
           >
             Đơn hàng của tôi
           </button>
@@ -134,25 +134,25 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
         {/* Main Card */}
         <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
           {/* Card Top Banner */}
-          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 px-5 sm:px-6 py-4 sm:py-5 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-semibold text-blue-100 uppercase tracking-wider">
+          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 px-4 sm:px-6 py-3.5 sm:py-5 text-white">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-[11px] sm:text-xs font-semibold text-blue-100 uppercase tracking-wider block">
                   Trạng thái đơn hàng
                 </span>
-                <h1 className="text-xl sm:text-2xl font-extrabold mt-0.5">
+                <h1 className="text-lg sm:text-2xl font-extrabold mt-0.5 truncate">
                   Đơn #{order.id.slice(-6)}
                 </h1>
               </div>
               <span
-                className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-extrabold border ${STATUS_BADGES[order.status]}`}
+                className={`px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-xs sm:text-sm font-extrabold border shrink-0 whitespace-nowrap ${STATUS_BADGES[order.status]}`}
               >
                 {STATUS_LABELS[order.status]}
               </span>
             </div>
           </div>
 
-          <div className="p-5 sm:p-6 space-y-5">
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
             {/* Payment Callout Section */}
             {order.paymentStatus === 'unpaid' && (
               <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-xs">
@@ -254,62 +254,68 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
               </div>
             )}
 
-            {/* Order Details List with larger fonts */}
-            <div className="divide-y divide-slate-100 text-sm sm:text-base">
-              <div className="flex justify-between items-center py-3">
-                <span className="text-gray-600 text-xs sm:text-sm font-medium">Mã đơn hàng</span>
+            {/* Order Details List */}
+            <div className="divide-y divide-slate-100 text-xs sm:text-sm">
+              <div className="flex justify-between items-center py-2.5 sm:py-3 gap-2">
+                <span className="text-gray-500 font-medium shrink-0">Mã đơn hàng</span>
                 <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-bold text-gray-900 text-sm sm:text-base bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
-                    {order.id}
+                  <span
+                    className="font-mono font-bold text-gray-800 bg-slate-100 px-2 py-0.5 rounded text-xs sm:text-sm border border-slate-200"
+                    title={order.id}
+                  >
+                    ...{order.id.slice(-5)}
                   </span>
-                  <CopyButton text={order.id} title="Sao chép mã đơn hàng" />
+                  <CopyButton text={order.id} title="Sao chép toàn bộ mã đơn" />
                 </div>
               </div>
 
-              <div className="flex justify-between items-center py-3">
-                <span className="text-gray-600 text-xs sm:text-sm font-medium">Mã / Link sự kiện</span>
-                <div className="flex items-center gap-1.5 max-w-[65%]">
-                  <span className="font-mono font-semibold text-gray-900 text-xs sm:text-sm truncate" title={order.eventCode}>
+              <div className="flex justify-between items-center py-2.5 sm:py-3 gap-2">
+                <span className="text-gray-500 font-medium shrink-0">Mã / Link sự kiện</span>
+                <div className="flex items-center gap-1.5 min-w-0 justify-end">
+                  <span
+                    className="font-mono font-semibold text-gray-900 text-xs sm:text-sm truncate max-w-[140px] sm:max-w-[200px]"
+                    title={order.eventCode}
+                  >
                     {order.eventCode}
                   </span>
                   <CopyButton text={order.eventCode} title="Sao chép mã sự kiện" />
                 </div>
               </div>
 
-              <div className="flex justify-between items-center py-3">
-                <span className="text-gray-600 text-xs sm:text-sm font-medium">Gói dịch vụ</span>
-                <span className="font-bold text-gray-900 text-sm sm:text-base">{serviceName}</span>
+              <div className="flex justify-between items-center py-2.5 sm:py-3 gap-2">
+                <span className="text-gray-500 font-medium shrink-0">Gói hỗ trợ mốc</span>
+                <span className="font-bold text-gray-900 text-right">{serviceName}</span>
               </div>
 
-              <div className="flex justify-between items-center py-3">
-                <span className="text-gray-600 text-xs sm:text-sm font-medium">Số tiền thanh toán</span>
-                <span className="font-extrabold text-blue-600 text-lg sm:text-xl">
+              <div className="flex justify-between items-center py-2.5 sm:py-3 gap-2">
+                <span className="text-gray-500 font-medium shrink-0">Số tiền thanh toán</span>
+                <span className="font-extrabold text-blue-600 text-base sm:text-lg text-right">
                   {servicePrice.toLocaleString('vi-VN')}đ
                 </span>
               </div>
 
-              <div className="flex justify-between items-center py-3">
-                <span className="text-gray-600 text-xs sm:text-sm font-medium">Thanh toán</span>
+              <div className="flex justify-between items-center py-2.5 sm:py-3 gap-2">
+                <span className="text-gray-500 font-medium shrink-0">Thanh toán</span>
                 <span
-                  className={`px-3 py-1 rounded-full text-xs sm:text-sm font-extrabold border ${PAYMENT_STATUS_BADGES[order.paymentStatus]}`}
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border shrink-0 ${PAYMENT_STATUS_BADGES[order.paymentStatus]}`}
                 >
                   {PAYMENT_STATUS_LABELS[order.paymentStatus]}
                 </span>
               </div>
 
-              <div className="flex justify-between items-center py-3">
-                <span className="text-gray-600 text-xs sm:text-sm font-medium">Tiến độ thực hiện</span>
+              <div className="flex justify-between items-center py-2.5 sm:py-3 gap-2">
+                <span className="text-gray-500 font-medium shrink-0">Tiến độ thực hiện</span>
                 <span
-                  className={`px-3 py-1 rounded-full text-xs sm:text-sm font-extrabold border ${STATUS_BADGES[order.status]}`}
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border shrink-0 ${STATUS_BADGES[order.status]}`}
                 >
                   {STATUS_LABELS[order.status]}
                 </span>
               </div>
 
               {order.employeeName && (
-                <div className="flex justify-between items-center py-3">
-                  <span className="text-gray-600 text-xs sm:text-sm font-medium">Nhân viên phụ trách</span>
-                  <span className="font-bold text-gray-800 text-sm sm:text-base">{order.employeeName}</span>
+                <div className="flex justify-between items-center py-2.5 sm:py-3 gap-2">
+                  <span className="text-gray-500 font-medium shrink-0">Người phụ trách</span>
+                  <span className="font-bold text-gray-800 text-right">{order.employeeName}</span>
                 </div>
               )}
             </div>
