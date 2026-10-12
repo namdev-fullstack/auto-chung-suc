@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { PAYMENT_CONFIG, getSepayQrUrl } from '@/config/constants';
+import { PAYMENT_CONFIG } from '@/config/constants';
+import { buildVietQRUrl, sanitizeMemo } from '@/lib/payment-utils';
 import { confirmPaymentTransfer } from '@/lib/orders';
 import CopyButton from '@/components/CopyButton';
 import { IconAlert, IconCheck, IconQrCode, IconX, Spinner } from '@/components/Icons';
@@ -26,6 +27,7 @@ export default function PaymentModal({
   const [loading, setLoading] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
+  const [downloading, setDownloading] = useState(false);
 
   // Mỗi khi mở modal, luôn bắt đầu bằng màn hình thanh toán QR & thông tin chuyển khoản
   useEffect(() => {
@@ -37,9 +39,37 @@ export default function PaymentModal({
 
   if (!isOpen) return null;
 
-  const shortId = orderId.slice(-5);
-  const qrUrl = getSepayQrUrl(amount, shortId);
+  // Chuẩn hóa nội dung chuyển khoản: Chỉ đúng chuỗi mã đơn ngắn gọn, sạch sẽ
+  const shortId = sanitizeMemo(orderId.slice(-6));
+  const qrUrl = buildVietQRUrl({
+    bankId: PAYMENT_CONFIG.BANK_ID,
+    accountNo: PAYMENT_CONFIG.ACCOUNT_NO,
+    amount,
+    memo: shortId,
+    accountName: PAYMENT_CONFIG.ACCOUNT_NAME,
+    template: 'compact',
+  });
   const zaloUrl = 'https://zalo.me/0966216495';
+
+  const handleDownloadQr = async () => {
+    setDownloading(true);
+    try {
+      const response = await fetch(qrUrl);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `vietqr-${shortId}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(qrUrl, '_blank');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const handleConfirm = async () => {
     setLoading(true);
@@ -154,6 +184,15 @@ export default function PaymentModal({
                 <p className="text-[11px] sm:text-xs text-gray-500 mt-2 text-center font-medium">
                   Mở ứng dụng ngân hàng bất kỳ để quét mã QR
                 </p>
+                <button
+                  type="button"
+                  onClick={handleDownloadQr}
+                  disabled={downloading}
+                  className="mt-2 px-3 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-60"
+                >
+                  {downloading ? <Spinner className="h-3 w-3" /> : <span>📥</span>}
+                  <span>{downloading ? 'Đang tải...' : 'Tải ảnh QR về máy'}</span>
+                </button>
               </div>
 
               {/* Thông tin chuyển khoản */}
