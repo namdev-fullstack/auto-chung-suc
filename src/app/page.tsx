@@ -3,47 +3,121 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createOrder } from '@/lib/orders';
-import { getActiveServices } from '@/lib/services';
+import { getActiveServices, getCachedServicesSync } from '@/lib/services';
+import { CONTACT_CONFIG, EVENT_CODE_CONFIG, extractEventCode } from '@/config/constants';
 import { Service } from '@/types/database';
-import { IconCheck, IconSearch, Spinner } from '@/components/Icons';
+import { IconCheck, IconFacebook, IconSearch, IconZalo, Spinner } from '@/components/Icons';
+import ParticleBackground from '@/components/ParticleBackground';
 
 export default function Home() {
   const router = useRouter();
   const [eventCode, setEventCode] = useState('');
-  const [services, setServices] = useState<Service[]>([]);
-  const [selectedService, setSelectedService] = useState('');
+  const [inputError, setInputError] = useState('');
+  // Khởi tạo dịch vụ ngay từ cache hoặc default để tránh đơ/chậm khi vào hoặc back lại trang trên mobile
+  const [services, setServices] = useState<Service[]>(() => getCachedServicesSync());
+  const [selectedService, setSelectedService] = useState<string>(() => {
+    const initial = getCachedServicesSync();
+    return initial[0]?.id || 'FULL_3_RUONG';
+  });
   const [loading, setLoading] = useState(false);
-  const [loadingServices, setLoadingServices] = useState(true);
+  const [loadingServices, setLoadingServices] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const load = async () => {
+    let isMounted = true;
+
+    // Reset trạng thái loading nếu trình duyệt khôi phục từ bfcache (Back/Forward Cache) trên di động
+    const handlePageShow = () => {
+      setLoading(false);
+      const cached = getCachedServicesSync();
+      if (cached.length > 0) {
+        setServices(cached);
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+
+    const loadFreshServices = async () => {
       try {
-        const data = await getActiveServices();
-        setServices(data);
+        const data = await getActiveServices({ timeoutMs: 3500 });
+        if (!isMounted) return;
         if (data.length > 0) {
-          setSelectedService(data[0].id);
+          setServices(data);
+          setSelectedService((prev) => (data.some((s) => s.id === prev) ? prev : data[0].id));
         }
       } catch (err) {
-        console.error(err);
-        setError('Không tải được danh sách dịch vụ');
+        console.warn('Lỗi cập nhật danh sách dịch vụ:', err);
       } finally {
-        setLoadingServices(false);
+        if (isMounted) {
+          setLoadingServices(false);
+        }
       }
     };
 
-    load();
+    loadFreshServices();
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('pageshow', handlePageShow);
+    };
   }, []);
 
-  const currentSelected = services.find((s) => s.id === selectedService);
+  const currentSelected = services.find((s) => s.id === selectedService) || services[0];
+
+  // Trích xuất mã hiển thị xem trước real-time
+  const extractedResult = eventCode.trim() ? extractEventCode(eventCode) : null;
+
+  const handleEventCodeChange = (value: string) => {
+    setEventCode(value);
+    if (inputError) {
+      setInputError('');
+    }
+  };
+
+  const getServiceBadgeInfo = (service: Service, index: number) => {
+    // Giá fake / niêm yết: nếu DB có thì dùng, nếu chưa có thì tính giá niêm yết ~35% cao hơn để kích cầu
+    const fakePrice =
+      service.originalPrice && service.originalPrice > service.price
+        ? service.originalPrice
+        : Math.round((service.price * 1.35) / 1000) * 1000;
+
+    const discountPercent = Math.max(
+      10,
+      Math.min(70, Math.round(((fakePrice - service.price) / fakePrice) * 100))
+    );
+
+    let tagText = `GIẢM ${discountPercent}%`;
+    let isSpecial = false;
+
+    if (index === 0 || service.id === 'FULL_3_RUONG') {
+      tagText = '👑 KHUYÊN DÙNG';
+      isSpecial = true;
+    } else if (index === 1 || service.id === 'RUONG_SS') {
+      tagText = '🔥 SIÊU HOT';
+      isSpecial = true;
+    } else if (index === 2 || service.id === 'RUONG_S_PLUS_PLUS') {
+      tagText = '⭐ TIẾT KIỆM';
+    } else {
+      tagText = '🎯 TIẾT KIỆM';
+    }
+
+    return {
+      fakePrice,
+      discountPercent,
+      tagText,
+      isSpecial,
+    };
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
+    setInputError('');
 
-    const cleanCode = eventCode.trim();
-    if (!cleanCode) {
-      setError('Vui lòng nhập mã sự kiện hoặc dán link sự kiện');
+    // Kiểm tra và trích xuất mã tự động từ tin nhắn chia sẻ hoặc link
+    const codeResult = extractEventCode(eventCode);
+    if (!codeResult.isValid) {
+      setInputError(codeResult.error || 'Vui lòng nhập mã sự kiện hợp lệ');
       return;
     }
 
@@ -55,8 +129,9 @@ export default function Home() {
     setLoading(true);
 
     try {
+      // Lưu đúng mã đã làm sạch (ví dụ: PwN8JZ5gWH) vào cơ sở dữ liệu
       const order = await createOrder({
-        eventCode: cleanCode,
+        eventCode: codeResult.cleanCode,
         serviceType: selectedService,
         amount: currentSelected.price,
       });
@@ -74,23 +149,32 @@ export default function Home() {
 
       // Chuyển sang trang theo dõi và kích hoạt mở modal thanh toán ngay
       router.push(`/track/${order.id}?pay=1`);
-    } catch (err: any) {
-      setError(err.message || 'Đã có lỗi xảy ra khi tạo đơn');
-    } finally {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Đã có lỗi xảy ra khi tạo đơn';
+      setError(message);
       setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 py-5 sm:py-10 px-3 sm:px-6">
-      <div className="max-w-md mx-auto">
+    <main className="relative min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-blue-50/40 py-4 sm:py-9 px-3.5 sm:px-6 overflow-hidden flex flex-col justify-center">
+      {/* Hiệu ứng hạt ánh sáng tương tác mượt mà trên di động */}
+      <ParticleBackground />
+
+      {/* Ánh sáng mờ nghệ thuật nền (Ambient Blur Orbs) */}
+      <div
+        className="absolute top-6 left-1/2 -translate-x-1/2 w-[340px] sm:w-[480px] h-[340px] bg-gradient-to-tr from-blue-400/20 via-indigo-400/15 to-purple-400/20 rounded-full blur-3xl pointer-events-none"
+        aria-hidden="true"
+      />
+
+      <div className="relative z-10 max-w-md mx-auto w-full">
         {/* Card Header & Brand */}
-        <div className="text-center mb-5">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-[11px] sm:text-xs font-semibold mb-2.5 tracking-wide">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+        <div className="text-center mb-4 sm:mb-5">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/90 backdrop-blur-md text-blue-700 rounded-full text-[11px] sm:text-xs font-bold mb-2 tracking-wide shadow-xs border border-blue-100">
+            <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping"></span>
             Hệ Thống Tương Tác Sự Kiện LQ
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight leading-tight">
             Auto Chung Sức - TachiOni
           </h1>
           <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto leading-relaxed">
@@ -99,85 +183,108 @@ export default function Home() {
         </div>
 
         {/* Form Container */}
-        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 p-4 sm:p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="bg-white/95 backdrop-blur-sm rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/80 border border-white p-4 sm:p-6 transition-all">
+          <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4">
             {/* Service Selection */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm sm:text-base font-extrabold text-gray-800 flex items-center gap-1">
+                <label className="text-xs sm:text-sm font-extrabold text-gray-800 flex items-center gap-1">
                   <span>Chọn gói hỗ trợ mốc</span>
                   <span className="text-red-500">*</span>
                 </label>
-                <span className="text-[11px] sm:text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 shrink-0">
-                  Tự động 24/7
+                <span className="text-[10px] sm:text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200/80 shrink-0 inline-flex items-center gap-1">
+                  <span>⚡</span>
+                  <span>Siêu tốc 5-15p</span>
                 </span>
               </div>
 
-              {loadingServices ? (
-                <div className="py-6 flex flex-col items-center justify-center text-gray-400 gap-2">
+              {loadingServices && services.length === 0 ? (
+                <div className="py-7 flex flex-col items-center justify-center text-gray-400 gap-2">
                   <Spinner className="h-6 w-6 text-blue-600" />
-                  <p className="text-xs sm:text-sm">Đang tải danh sách mốc hỗ trợ...</p>
+                  <p className="text-xs font-medium">Đang tải danh sách mốc hỗ trợ...</p>
                 </div>
               ) : services.length === 0 ? (
-                <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs sm:text-sm text-center">
+                <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs text-center">
                   Hiện chưa có dịch vụ nào đang mở. Vui lòng quay lại sau!
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-2.5">
+                <div className="grid grid-cols-1 gap-2 sm:gap-2.5">
                   {services.map((service, index) => {
                     const isSelected = selectedService === service.id;
-                    const isHot = index === 0;
+                    const { fakePrice, discountPercent, tagText, isSpecial } =
+                      getServiceBadgeInfo(service, index);
 
                     return (
                       <div
                         key={service.id}
                         onClick={() => setSelectedService(service.id)}
-                        className={`relative rounded-xl sm:rounded-2xl p-3 sm:p-3.5 border-2 transition-all cursor-pointer select-none flex items-center justify-between gap-2.5 ${
+                        className={`relative rounded-xl p-2.5 sm:p-3 border-2 transition-all duration-150 cursor-pointer select-none flex items-center justify-between gap-2 active:scale-[0.985] ${
                           isSelected
-                            ? 'border-blue-600 bg-blue-50/70 shadow-xs'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                            ? 'border-blue-600 bg-gradient-to-r from-blue-50/90 via-indigo-50/50 to-blue-50/90 shadow-sm ring-2 ring-blue-500/20'
+                            : 'border-slate-200 hover:border-blue-300 bg-white hover:bg-slate-50/60'
                         }`}
                       >
-                        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {/* Radio Check Indicator */}
                           <div
-                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
                               isSelected
-                                ? 'border-blue-600 bg-blue-600 text-white'
+                                ? 'border-blue-600 bg-blue-600 text-white shadow-xs'
                                 : 'border-gray-300 bg-white'
                             }`}
                           >
                             {isSelected && <IconCheck className="h-3 w-3 stroke-[3]" />}
                           </div>
 
+                          {/* Info Column */}
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span
-                                className={`text-sm sm:text-base font-bold leading-tight ${
-                                  isSelected ? 'text-blue-900' : 'text-gray-900'
+                                className={`text-sm sm:text-base font-extrabold leading-snug ${
+                                  isSelected ? 'text-blue-950' : 'text-gray-900'
                                 }`}
                               >
                                 {service.name}
                               </span>
-                              {isHot && (
-                                <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0">
-                                  HOT
-                                </span>
-                              )}
+
+                              {/* Sale / Recommendation Badge */}
+                              <span
+                                className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0 ${
+                                  isSpecial
+                                    ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 text-white shadow-2xs'
+                                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                }`}
+                              >
+                                {tagText}
+                              </span>
                             </div>
-                            <span className="text-[11px] sm:text-xs text-gray-500 block truncate mt-0.5">
-                              Hỗ trợ hoàn thành mốc tương tác
-                            </span>
+
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[11px] text-gray-500 block truncate">
+                                Trọn gói hoàn thành mốc
+                              </span>
+                              <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200/80 px-1 py-0.2 rounded shrink-0">
+                                -{discountPercent}%
+                              </span>
+                            </div>
                           </div>
                         </div>
 
+                        {/* Price Column (Real & Fake Price) */}
                         <div className="text-right shrink-0">
-                          <span
-                            className={`text-sm sm:text-base font-extrabold whitespace-nowrap ${
+                          {/* Fake Price (Gạch ngang tạo cảm giác giảm giá) */}
+                          <div className="text-[11px] text-gray-400 line-through font-medium leading-none mb-0.5">
+                            {fakePrice.toLocaleString('vi-VN')}đ
+                          </div>
+
+                          {/* Real Price */}
+                          <div
+                            className={`text-sm sm:text-base font-black whitespace-nowrap leading-tight ${
                               isSelected ? 'text-blue-600' : 'text-gray-900'
                             }`}
                           >
                             {service.price.toLocaleString('vi-VN')}đ
-                          </span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -190,41 +297,66 @@ export default function Home() {
             <div>
               <label
                 htmlFor="eventCode"
-                className="text-sm sm:text-base font-extrabold text-gray-800 flex items-center justify-between mb-1.5"
+                className="text-xs sm:text-sm font-extrabold text-gray-800 flex items-center gap-0.5 mb-1.5"
               >
-                <span>Mã hoặc link sự kiện</span>
-                <span className="text-red-500">*</span>
+                <span>Mã Sk chung sức</span>
+                <span className="text-red-500 font-bold">*</span>
               </label>
               <div className="relative">
                 <input
                   type="text"
                   id="eventCode"
                   value={eventCode}
-                  onChange={(e) => setEventCode(e.target.value)}
-                  placeholder="Dán mã sự kiện hoặc liên kết vào đây"
-                  className="w-full px-3.5 py-3 sm:py-3.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base font-medium transition-all"
-                  required
+                  onChange={(e) => handleEventCodeChange(e.target.value)}
+                  placeholder="Dán mã hoặc lời mời sự kiện vào đây"
+                  className={`w-full px-3.5 py-3 bg-slate-50 border rounded-xl focus:bg-white text-sm font-medium transition-all ${
+                    inputError
+                      ? 'border-red-500 ring-2 ring-red-500/20 bg-red-50/20 focus:border-red-500 focus:ring-red-500/30'
+                      : 'border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                  }`}
                 />
               </div>
-              <p className="text-[11px] sm:text-xs text-gray-500 mt-1.5 leading-relaxed">
-                💡 Sao chép mã chia sẻ hoặc liên kết sự kiện từ trang nhiệm vụ rồi dán vào đây.
-              </p>
+
+              {/* Thông báo lỗi hoặc mã đã nhận diện ngay góc trái phía dưới input */}
+              {inputError ? (
+                <p className="text-xs text-red-600 font-bold mt-1.5 flex items-center gap-1 text-left animate-in fade-in duration-150">
+                  <span>⚠️</span>
+                  <span>{inputError}</span>
+                </p>
+              ) : extractedResult?.isValid ? (
+                <p className="text-[11px] text-emerald-700 font-semibold mt-1.5 flex items-center gap-1.5 text-left">
+                  <span>✓</span>
+                  <span>
+                    Đã nhận diện mã: <strong className="font-mono bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-800">{extractedResult.cleanCode}</strong>
+                  </span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed text-left">
+                  💡 Dán mã hoặc toàn bộ tin nhắn chia sẻ từ game, hệ thống sẽ tự động lọc đúng {EVENT_CODE_CONFIG.REQUIRED_LENGTH} ký tự mã.
+                </p>
+              )}
             </div>
 
-            {/* Error Message */}
+            {/* Error Message chung */}
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-xs font-medium">
                 {error}
               </div>
             )}
 
             {/* Submit Button */}
-            <div className="pt-1">
+            <div className="pt-0.5">
               <button
                 type="submit"
-                disabled={loading || loadingServices || services.length === 0}
-                className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white py-3.5 sm:py-4 px-4 rounded-xl sm:rounded-2xl font-extrabold shadow-lg shadow-blue-500/25 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed text-base flex items-center justify-center gap-2"
+                disabled={loading || services.length === 0}
+                className="group relative overflow-hidden w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white py-3.5 px-4 rounded-xl font-black shadow-lg shadow-blue-500/30 active:scale-[0.985] transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base flex items-center justify-center gap-2"
               >
+                {/* Hiệu ứng quét sáng lướt qua nút bấm */}
+                <span
+                  className="absolute inset-0 w-1/2 h-full bg-white/20 skew-x-12 -translate-x-full group-hover:translate-x-[300%] transition-transform duration-1000 ease-out pointer-events-none"
+                  aria-hidden="true"
+                />
+
                 {loading ? (
                   <>
                     <Spinner className="h-5 w-5" />
@@ -234,7 +366,7 @@ export default function Home() {
                   <>
                     <span>Xác nhận đặt đơn</span>
                     {currentSelected && (
-                      <span className="bg-white/20 px-2 py-0.5 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap">
+                      <span className="bg-white/20 px-2 py-0.5 rounded-lg text-xs font-bold whitespace-nowrap">
                         {currentSelected.price.toLocaleString('vi-VN')}đ
                       </span>
                     )}
@@ -242,10 +374,57 @@ export default function Home() {
                 )}
               </button>
             </div>
+
+            {/* Support Divider */}
+            <div className="relative py-0.5">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200"></div>
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-white px-2.5 text-slate-500 font-semibold text-[11px] sm:text-xs">
+                  Cần hỗ trợ gấp? Liên hệ ngay
+                </span>
+              </div>
+            </div>
+
+            {/* 2 Contact Buttons: Zalo & Facebook */}
+            <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+              {/* Zalo Button */}
+              <a
+                href={CONTACT_CONFIG.ZALO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-2xs hover:shadow-xs active:scale-[0.98]"
+              >
+                <IconZalo className="w-5 h-5 shrink-0" />
+                <div className="text-left leading-tight">
+                  <div className="font-extrabold">Chat Zalo</div>
+                  <div className="text-[10px] text-blue-600/80 font-medium">
+                    {CONTACT_CONFIG.ZALO_PHONE}
+                  </div>
+                </div>
+              </a>
+
+              {/* Facebook Button */}
+              <a
+                href={CONTACT_CONFIG.FACEBOOK_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-2xs hover:shadow-xs active:scale-[0.98]"
+              >
+                <div className="w-5 h-5 rounded-full bg-[#1877F2] text-white flex items-center justify-center shrink-0 p-1">
+                  <IconFacebook className="w-full h-full" />
+                </div>
+                <div className="text-left leading-tight">
+                  <div className="font-extrabold">Facebook</div>
+                  <div className="text-[10px] text-indigo-600/80 font-medium">namdev1029</div>
+                </div>
+              </a>
+            </div>
           </form>
 
           {/* Quick Links */}
-          <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-around text-xs sm:text-sm font-bold text-gray-600">
+          <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-center justify-around text-xs font-bold text-gray-600">
             <button
               type="button"
               onClick={() => {
@@ -273,7 +452,7 @@ export default function Home() {
         </div>
 
         {/* Mobile Safe Notice */}
-        <div className="mt-3.5 text-center">
+        <div className="mt-3 text-center">
           <p className="text-[11px] text-gray-400">
             Hệ thống hỗ trợ trao đổi tương tác 24/7 • Đảm bảo an toàn 100%
           </p>

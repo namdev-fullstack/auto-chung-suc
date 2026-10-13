@@ -12,8 +12,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-import ZaloWidget from "@/components/ZaloWidget";
-
 export const metadata: Metadata = {
   title: "Auto Chung Sức - Hỗ Trợ Tương Tác Sự Kiện TachiOni",
   description: "Hệ thống hỗ trợ trao đổi liên kết và tương tác sự kiện Chung Sức 24/7, an toàn và nhanh chóng.",
@@ -27,7 +25,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         {children}
-        <ZaloWidget />
       </body>
     </html>
   );

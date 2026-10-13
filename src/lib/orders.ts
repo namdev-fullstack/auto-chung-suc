@@ -3,6 +3,7 @@ import {
   doc,
   addDoc,
   updateDoc,
+  deleteDoc,
   getDoc,
   getDocs,
   query,
@@ -52,16 +53,11 @@ export const createOrder = async (input: CreateOrderInput): Promise<Order> => {
   };
 
   const docRef = await addDoc(collection(db, ORDERS_COLLECTION), orderData);
-  const orderSnapshot = await getDoc(docRef);
-  
-  if (!orderSnapshot.exists()) {
-    throw new Error('Failed to create order');
-  }
 
   return {
-    id: orderSnapshot.id,
-    ...orderSnapshot.data(),
-  } as Order;
+    id: docRef.id,
+    ...orderData,
+  } as unknown as Order;
 };
 
 export const getOrderById = async (orderId: string): Promise<Order | null> => {
@@ -464,6 +460,19 @@ export const batchUpdateOrdersPaymentStatus = async (
     batch.update(ref, updateData);
   }
 
+  await batch.commit();
+};
+
+export const deleteOrder = async (orderId: string): Promise<void> => {
+  await deleteDoc(doc(db, ORDERS_COLLECTION, orderId));
+};
+
+export const batchDeleteOrders = async (orderIds: string[]): Promise<void> => {
+  if (orderIds.length === 0) return;
+  const batch = writeBatch(db);
+  for (const id of orderIds) {
+    batch.delete(doc(db, ORDERS_COLLECTION, id));
+  }
   await batch.commit();
 };
 

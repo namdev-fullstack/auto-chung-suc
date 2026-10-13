@@ -4,3 +4,9 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=chat-a8a88
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=chat-a8a88.firebasestorage.app
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=488660186381
 NEXT_PUBLIC_FIREBASE_APP_ID=1:488660186381:web:810b0d9705cf2a5fabec44
+
+# Độ dài mã sự kiện (mặc định 10 ký tự, có thể đổi khi sự kiện mới có độ dài khác)
+NEXT_PUBLIC_EVENT_CODE_LENGTH=10
+
+# Link liên hệ Facebook
+NEXT_PUBLIC_FACEBOOK_URL=https://www.facebook.com/namdev1029

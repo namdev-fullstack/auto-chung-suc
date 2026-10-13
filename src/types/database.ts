@@ -15,6 +15,7 @@ export interface Service {
   name: string;
   price: number;
   costPrice?: number;
+  originalPrice?: number;
   active: boolean;
   sortOrder: number;
 }
@@ -75,6 +76,7 @@ export interface CreateServiceInput {
   name: string;
   price: number;
   costPrice?: number;
+  originalPrice?: number;
   active: boolean;
   sortOrder?: number;
 }

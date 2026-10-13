@@ -14,6 +14,8 @@ import {
   resetOrderCopiedStatus,
   batchUpdateOrdersStatus,
   batchUpdateOrdersPaymentStatus,
+  deleteOrder,
+  batchDeleteOrders,
 } from '@/lib/orders';
 import { getAllEmployees, createEmployee, updateEmployee } from '@/lib/employees';
 import {
@@ -27,6 +29,7 @@ import {
 import { Order, Employee, Service } from '@/types/database';
 import { ORDER_STATUS, PAYMENT_STATUS, PAYMENT_STATUS_LABELS, PaymentStatus, OrderStatus } from '@/config/constants';
 import Toast, { ToastType } from '@/components/Toast';
+import ConfirmModal from '@/components/ConfirmModal';
 import CopyButton from '@/components/CopyButton';
 import NotificationBell from '@/components/NotificationBell';
 import AdminStatsChart from '@/components/AdminStatsChart';
@@ -135,10 +138,30 @@ export default function AdminPage() {
     name: '',
     price: 0,
     costPrice: 0,
+    originalPrice: 0,
     active: true,
   });
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: React.ReactNode;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'primary';
+    isLoading?: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const closeConfirmModal = () => {
+    setConfirmModal((prev) => ({ ...prev, isOpen: false, isLoading: false }));
+  };
 
   const showToast = (message: string, type: ToastType) => setToast({ message, type });
 
@@ -408,7 +431,7 @@ export default function AdminPage() {
 
   const openCreateService = () => {
     setEditingService(null);
-    setServiceForm({ name: '', price: 0, costPrice: 0, active: true });
+    setServiceForm({ name: '', price: 0, costPrice: 0, originalPrice: 0, active: true });
     setShowServiceForm(true);
   };
 
@@ -418,6 +441,7 @@ export default function AdminPage() {
       name: service.name,
       price: service.price,
       costPrice: service.costPrice || 0,
+      originalPrice: service.originalPrice || 0,
       active: service.active,
     });
     setShowServiceForm(true);
@@ -436,6 +460,7 @@ export default function AdminPage() {
           name: serviceForm.name.trim(),
           price: Number(serviceForm.price),
           costPrice: Number(serviceForm.costPrice || 0),
+          originalPrice: Number(serviceForm.originalPrice || 0),
           active: serviceForm.active,
         });
         showToast('Đã cập nhật dịch vụ', 'success');
@@ -444,6 +469,7 @@ export default function AdminPage() {
           name: serviceForm.name.trim(),
           price: Number(serviceForm.price),
           costPrice: Number(serviceForm.costPrice || 0),
+          originalPrice: Number(serviceForm.originalPrice || 0),
           active: serviceForm.active,
         });
         showToast('Đã thêm dịch vụ', 'success');
@@ -471,19 +497,116 @@ export default function AdminPage() {
     }
   };
 
-  const handleDeleteService = async (service: Service) => {
-    if (!confirm(`Xóa dịch vụ "${service.name}"? Đơn cũ vẫn giữ nguyên tên/giá đã lưu.`)) return;
+  const handleDeleteService = (service: Service) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Xóa dịch vụ',
+      message: `Bạn có chắc muốn xóa dịch vụ "${service.name}"? Đơn hàng cũ vẫn giữ nguyên thông tin đã lưu.`,
+      confirmText: 'Xóa dịch vụ',
+      cancelText: 'Hủy',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isLoading: true }));
+        setActionLoading(`service-delete-${service.id}`);
+        try {
+          await deleteService(service.id);
+          showToast('Đã xóa dịch vụ', 'success');
+          await loadServicesList();
+          closeConfirmModal();
+        } catch (error: any) {
+          showToast(error.message || 'Không thể xóa dịch vụ', 'error');
+          setConfirmModal((prev) => ({ ...prev, isLoading: false }));
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
+  };
 
-    setActionLoading(`service-delete-${service.id}`);
-    try {
-      await deleteService(service.id);
-      showToast('Đã xóa dịch vụ', 'success');
-      await loadServicesList();
-    } catch (error: any) {
-      showToast(error.message || 'Không thể xóa dịch vụ', 'error');
-    } finally {
-      setActionLoading(null);
-    }
+  const handleDeleteOrder = (order: Order) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Xóa đơn hàng vĩnh viễn',
+      message: (
+        <div>
+          <p>
+            Bạn có chắc chắn muốn xóa đơn hàng{' '}
+            <span className="font-mono font-bold text-gray-900 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+              #{order.id}
+            </span>?
+          </p>
+          <p className="mt-2 text-xs text-red-600 font-semibold">
+            ⚠️ Dữ liệu đơn này sẽ bị xóa hoàn toàn khỏi hệ thống và không thể khôi phục.
+          </p>
+        </div>
+      ),
+      confirmText: 'Xóa vĩnh viễn',
+      cancelText: 'Giữ lại',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isLoading: true }));
+        setActionLoading(`delete-${order.id}`);
+        try {
+          await deleteOrder(order.id);
+          setOrders((prev) => prev.filter((o) => o.id !== order.id));
+          setSelectedOrderIds((prev) => {
+            const next = new Set(prev);
+            next.delete(order.id);
+            return next;
+          });
+          showToast('Đã xóa đơn hàng thành công', 'success');
+          closeConfirmModal();
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Không thể xóa đơn hàng';
+          showToast(msg, 'error');
+          setConfirmModal((prev) => ({ ...prev, isLoading: false }));
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
+  };
+
+  const handleBatchDeleteOrders = () => {
+    if (selectedOrderIds.size === 0) return;
+    const count = selectedOrderIds.size;
+    setConfirmModal({
+      isOpen: true,
+      title: `Xóa ${count} đơn hàng đã chọn`,
+      message: (
+        <div>
+          <p>
+            Bạn có chắc chắn muốn xóa vĩnh viễn{' '}
+            <span className="font-bold text-red-600">{count}</span> đơn hàng đã được chọn?
+          </p>
+          <p className="mt-2 text-xs text-red-600 font-semibold">
+            ⚠️ Toàn bộ dữ liệu của {count} đơn này sẽ bị xóa khỏi cơ sở dữ liệu và không thể hoàn tác.
+          </p>
+        </div>
+      ),
+      confirmText: `Xóa ${count} đơn`,
+      cancelText: 'Hủy bỏ',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isLoading: true }));
+        setBulkUpdating(true);
+        try {
+          const ids = Array.from(selectedOrderIds);
+          await batchDeleteOrders(ids);
+          setOrders((prev) => prev.filter((o) => !selectedOrderIds.has(o.id)));
+          setSelectedOrderIds(new Set());
+          setLastSelectedId(null);
+          showToast(`Đã xóa thành công ${count} đơn hàng`, 'success');
+          closeConfirmModal();
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Không thể xóa các đơn hàng đã chọn';
+          showToast(msg, 'error');
+          setConfirmModal((prev) => ({ ...prev, isLoading: false }));
+        } finally {
+          setBulkUpdating(false);
+        }
+      },
+    });
   };
 
   const filteredOrders = useMemo(() => {
@@ -553,21 +676,7 @@ export default function AdminPage() {
     setLastSelectedId(order.id);
   };
 
-  const handleCopyZalo = async () => {
-    if (selectedOrderIds.size === 0) return;
-
-    const selectedList = filteredOrders.filter((o) => selectedOrderIds.has(o.id));
-    if (selectedList.length === 0) return;
-
-    // Cảnh báo nếu trong các đơn được chọn có đơn ĐÃ ĐƯỢC COPY trước đó
-    const alreadyCopiedCount = selectedList.filter((o) => o.copied).length;
-    if (alreadyCopiedCount > 0) {
-      const confirmMsg = `CẢNH BÁO: Trong ${selectedList.length} đơn được chọn, có ${alreadyCopiedCount} đơn ĐÃ ĐƯỢC COPY trước đó.\n\nViệc copy lại có thể khiến nhân viên làm trùng đơn.\n\nBạn có chắc chắn muốn tiếp tục copy không?`;
-      if (!window.confirm(confirmMsg)) {
-        return;
-      }
-    }
-
+  const executeCopyOrders = async (selectedList: Order[]) => {
     const lines = selectedList.map((o) => {
       const serviceName = getServiceLabel(services, o.serviceType);
       return `${o.eventCode.trim()} - ${serviceName}`;
@@ -615,20 +724,58 @@ export default function AdminPage() {
     }
   };
 
-  const handleResetCopied = async (orderId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm('Đánh dấu đơn này là "Chưa copy" để có thể gửi lại?')) return;
+  const handleCopyZalo = async () => {
+    if (selectedOrderIds.size === 0) return;
 
-    setActionLoading(`reset-copy-${orderId}`);
-    try {
-      await resetOrderCopiedStatus(orderId);
-      showToast('Đã đánh dấu đơn là Chưa copy', 'success');
-      await loadOrders();
-    } catch (err: any) {
-      showToast(err.message || 'Không thể cập nhật trạng thái', 'error');
-    } finally {
-      setActionLoading(null);
+    const selectedList = filteredOrders.filter((o) => selectedOrderIds.has(o.id));
+    if (selectedList.length === 0) return;
+
+    // Cảnh báo nếu trong các đơn được chọn có đơn ĐÃ ĐƯỢC COPY trước đó
+    const alreadyCopiedCount = selectedList.filter((o) => o.copied).length;
+    if (alreadyCopiedCount > 0) {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Cảnh báo trùng lặp đơn hàng khi Copy',
+        message: `Trong ${selectedList.length} đơn được chọn, có ${alreadyCopiedCount} đơn ĐÃ ĐƯỢC COPY trước đó.\nViệc copy lại có thể khiến nhân viên làm trùng đơn.\nBạn có chắc chắn muốn tiếp tục copy không?`,
+        confirmText: 'Vẫn tiếp tục copy',
+        cancelText: 'Hủy bỏ',
+        variant: 'warning',
+        onConfirm: () => {
+          closeConfirmModal();
+          executeCopyOrders(selectedList);
+        },
+      });
+      return;
     }
+
+    await executeCopyOrders(selectedList);
+  };
+
+  const handleResetCopied = (orderId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConfirmModal({
+      isOpen: true,
+      title: 'Đánh dấu Chưa copy',
+      message: 'Đánh dấu đơn này là "Chưa copy" để có thể xuất lại danh sách gửi nhân viên?',
+      confirmText: 'Đồng ý',
+      cancelText: 'Hủy',
+      variant: 'primary',
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isLoading: true }));
+        setActionLoading(`reset-copy-${orderId}`);
+        try {
+          await resetOrderCopiedStatus(orderId);
+          showToast('Đã đánh dấu đơn là Chưa copy', 'success');
+          await loadOrders();
+          closeConfirmModal();
+        } catch (err: any) {
+          showToast(err.message || 'Không thể cập nhật trạng thái', 'error');
+          setConfirmModal((prev) => ({ ...prev, isLoading: false }));
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   const handleQuickSelect = (type: '5' | '10' | '20' | 'uncopied' | 'all' | 'clear') => {
@@ -665,59 +812,77 @@ export default function AdminPage() {
     }
   };
 
-  const handleBatchUpdateStatus = async (newStatus: OrderStatus) => {
+  const handleBatchUpdateStatus = (newStatus: OrderStatus) => {
     if (selectedOrderIds.size === 0) return;
     const count = selectedOrderIds.size;
     const statusName = STATUS_LABELS[newStatus] || newStatus;
 
-    if (!window.confirm(`Bạn có chắc muốn đổi trạng thái của ${count} đơn đã chọn thành "${statusName}"?`)) {
-      return;
-    }
-
-    setBulkUpdating(true);
-    try {
-      const ids = Array.from(selectedOrderIds);
-      await batchUpdateOrdersStatus(ids, newStatus, {
-        id: employee?.id,
-        name: employee?.name,
-        email: employee?.email,
-      });
-      showToast(`Đã đổi trạng thái ${count} đơn thành "${statusName}"`, 'success');
-      setSelectedOrderIds(new Set());
-      setLastSelectedId(null);
-      await loadOrders();
-    } catch (err: any) {
-      showToast(err.message || 'Lỗi khi cập nhật trạng thái hàng loạt', 'error');
-    } finally {
-      setBulkUpdating(false);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Đổi trạng thái đơn hàng loạt',
+      message: `Bạn có chắc muốn đổi trạng thái của ${count} đơn đã chọn thành "${statusName}"?`,
+      confirmText: `Đổi ${count} đơn`,
+      cancelText: 'Hủy',
+      variant: 'primary',
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isLoading: true }));
+        setBulkUpdating(true);
+        try {
+          const ids = Array.from(selectedOrderIds);
+          await batchUpdateOrdersStatus(ids, newStatus, {
+            id: employee?.id,
+            name: employee?.name,
+            email: employee?.email,
+          });
+          showToast(`Đã đổi trạng thái ${count} đơn thành "${statusName}"`, 'success');
+          setSelectedOrderIds(new Set());
+          setLastSelectedId(null);
+          await loadOrders();
+          closeConfirmModal();
+        } catch (err: any) {
+          showToast(err.message || 'Lỗi khi cập nhật trạng thái hàng loạt', 'error');
+          setConfirmModal((prev) => ({ ...prev, isLoading: false }));
+        } finally {
+          setBulkUpdating(false);
+        }
+      },
+    });
   };
 
-  const handleBatchUpdatePayment = async (newPayment: PaymentStatus) => {
+  const handleBatchUpdatePayment = (newPayment: PaymentStatus) => {
     if (selectedOrderIds.size === 0) return;
     const count = selectedOrderIds.size;
     const payName = PAYMENT_STATUS_LABELS[newPayment] || newPayment;
 
-    if (!window.confirm(`Bạn có chắc muốn đổi trạng thái thanh toán của ${count} đơn đã chọn thành "${payName}"?`)) {
-      return;
-    }
-
-    setBulkUpdating(true);
-    try {
-      const ids = Array.from(selectedOrderIds);
-      await batchUpdateOrdersPaymentStatus(ids, newPayment, {
-        autoSetProcessing: true,
-        employee: employee ? { id: employee.id, name: employee.name, email: employee.email } : undefined,
-      });
-      showToast(`Đã đổi trạng thái thanh toán ${count} đơn thành "${payName}"`, 'success');
-      setSelectedOrderIds(new Set());
-      setLastSelectedId(null);
-      await loadOrders();
-    } catch (err: any) {
-      showToast(err.message || 'Lỗi khi cập nhật thanh toán hàng loạt', 'error');
-    } finally {
-      setBulkUpdating(false);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Đổi trạng thái thanh toán hàng loạt',
+      message: `Bạn có chắc muốn đổi trạng thái thanh toán của ${count} đơn đã chọn thành "${payName}"?`,
+      confirmText: `Đổi ${count} đơn`,
+      cancelText: 'Hủy',
+      variant: 'primary',
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isLoading: true }));
+        setBulkUpdating(true);
+        try {
+          const ids = Array.from(selectedOrderIds);
+          await batchUpdateOrdersPaymentStatus(ids, newPayment, {
+            autoSetProcessing: true,
+            employee: employee ? { id: employee.id, name: employee.name, email: employee.email } : undefined,
+          });
+          showToast(`Đã đổi trạng thái thanh toán ${count} đơn thành "${payName}"`, 'success');
+          setSelectedOrderIds(new Set());
+          setLastSelectedId(null);
+          await loadOrders();
+          closeConfirmModal();
+        } catch (err: any) {
+          showToast(err.message || 'Lỗi khi cập nhật thanh toán hàng loạt', 'error');
+          setConfirmModal((prev) => ({ ...prev, isLoading: false }));
+        } finally {
+          setBulkUpdating(false);
+        }
+      },
+    });
   };
 
   if (loading) {
@@ -742,6 +907,17 @@ export default function AdminPage() {
           onClose={() => setToast(null)}
         />
       )}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+        variant={confirmModal.variant}
+        isLoading={confirmModal.isLoading}
+        onConfirm={confirmModal.onConfirm}
+        onClose={closeConfirmModal}
+      />
       <nav className="bg-white shadow-sm border-b sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-14 sm:h-16">
@@ -870,7 +1046,7 @@ export default function AdminPage() {
                 <h3 className="text-md font-semibold text-gray-900 mb-3">
                   {editingService ? 'Sửa dịch vụ' : 'Thêm dịch vụ mới'}
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Tên dịch vụ</label>
                     <input
@@ -882,12 +1058,25 @@ export default function AdminPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Giá bán (đ)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Giá bán thật (đ)</label>
                     <input
                       type="number"
                       min="0"
                       value={serviceForm.price}
                       onChange={(e) => setServiceForm({ ...serviceForm, price: Number(e.target.value) })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Giá fake / niêm yết (đ)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={serviceForm.originalPrice}
+                      onChange={(e) => setServiceForm({ ...serviceForm, originalPrice: Number(e.target.value) })}
+                      placeholder="Ví dụ: 150000"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -941,7 +1130,8 @@ export default function AdminPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giá bán</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giá bán thật</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giá fake (niêm yết)</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giá vốn</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lợi nhuận/đơn</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái</th>
@@ -951,12 +1141,30 @@ export default function AdminPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {services.map((service) => {
                     const unitProfit = service.price - (service.costPrice || 0);
+                    const hasDiscount = Boolean(service.originalPrice && service.originalPrice > service.price);
+                    const discountPercent = hasDiscount
+                      ? Math.round((((service.originalPrice || 0) - service.price) / (service.originalPrice || 1)) * 100)
+                      : 0;
 
                     return (
                       <tr key={service.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{service.name}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-600">
                           {service.price.toLocaleString('vi-VN')}đ
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {hasDiscount ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="line-through text-gray-400">
+                                {service.originalPrice?.toLocaleString('vi-VN')}đ
+                              </span>
+                              <span className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.2 rounded">
+                                -{discountPercent}%
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 italic">Chưa đặt</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {service.costPrice ? `${service.costPrice.toLocaleString('vi-VN')}đ` : '0đ'}
@@ -1405,6 +1613,17 @@ export default function AdminPage() {
                         <option value="pending_verification">Đợi xác nhận</option>
                         <option value="unpaid">Chưa thanh toán</option>
                       </select>
+
+                      {/* Nút Xóa hàng loạt */}
+                      <button
+                        onClick={handleBatchDeleteOrders}
+                        disabled={bulkUpdating}
+                        className="cursor-pointer bg-red-50 hover:bg-red-100 text-red-700 active:scale-[0.99] px-2.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 border border-red-200 transition-all shadow-2xs"
+                        title="Xóa vĩnh viễn các đơn đã chọn"
+                      >
+                        <IconTrash className="h-3.5 w-3.5" />
+                        <span>Xóa ({selectedOrderIds.size})</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1619,7 +1838,8 @@ export default function AdminPage() {
                                     <button
                                       onClick={() => handleUpdateStatus(order, 'processing')}
                                       disabled={actionLoading === `status-${order.id}`}
-                                      className="text-blue-600 hover:text-blue-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold"
+                                      className="text-blue-600 hover:text-blue-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                                      title="Reset lại trạng thái Đang làm"
                                     >
                                       {actionLoading === `status-${order.id}` ? <Spinner /> : <IconRefresh />}
                                       Reset
@@ -1629,12 +1849,27 @@ export default function AdminPage() {
                                     <button
                                       onClick={() => handleUpdateStatus(order, 'cancelled')}
                                       disabled={actionLoading === `status-${order.id}`}
-                                      className="text-red-600 hover:text-red-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold"
+                                      className="text-amber-600 hover:text-amber-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                                      title="Hủy đơn hàng"
                                     >
                                       {actionLoading === `status-${order.id}` ? <Spinner /> : <IconX />}
                                       Hủy
                                     </button>
                                   )}
+
+                                  {/* Icon Xóa đơn */}
+                                  <button
+                                    onClick={() => handleDeleteOrder(order)}
+                                    disabled={actionLoading === `delete-${order.id}`}
+                                    className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 cursor-pointer"
+                                    title="Xóa đơn hàng"
+                                  >
+                                    {actionLoading === `delete-${order.id}` ? (
+                                      <Spinner className="h-4 w-4" />
+                                    ) : (
+                                      <IconTrash className="h-4 w-4" />
+                                    )}
+                                  </button>
                                 </div>
                               </td>
                             </tr>
