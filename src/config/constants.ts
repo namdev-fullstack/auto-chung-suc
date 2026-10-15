@@ -27,6 +27,9 @@ export const DEFAULT_SERVICE_TYPES = [
 
 export type ServiceTypeId = string;
 
+// Phí đơn ưu tiên làm trước
+export const PRIORITY_ORDER_FEE = 19000;
+
 export const ORDER_STATUS = {
   PENDING: 'pending',
   PROCESSING: 'processing',

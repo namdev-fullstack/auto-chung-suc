@@ -137,9 +137,17 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
           <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 px-4 sm:px-6 py-3.5 sm:py-5 text-white">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <span className="text-[11px] sm:text-xs font-semibold text-blue-100 uppercase tracking-wider block">
-                  Trạng thái đơn hàng
-                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] sm:text-xs font-semibold text-blue-100 uppercase tracking-wider block">
+                    Trạng thái đơn hàng
+                  </span>
+                  {order.isPriority && (
+                    <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-amber-950 shadow-xs">
+                      <span>⚡</span>
+                      <span>ƯU TIÊN</span>
+                    </span>
+                  )}
+                </div>
                 <h1 className="text-lg sm:text-2xl font-extrabold mt-0.5 truncate">
                   Đơn #{order.id.slice(-6)}
                 </h1>
@@ -183,17 +191,14 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
 
             {order.paymentStatus === 'pending_verification' && (
               <div className="bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-2xl p-4 sm:p-5 space-y-3 shadow-xs">
-                <div className="flex items-start gap-3">
-                  <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl shrink-0 mt-0.5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl shrink-0">
                     <IconClock className="h-6 w-6 animate-spin text-amber-700" />
                   </div>
                   <div>
                     <h3 className="text-base sm:text-lg font-extrabold text-amber-900">
                       Đợi nhân viên xác nhận
                     </h3>
-                    <p className="text-xs sm:text-sm text-amber-800 mt-1 leading-relaxed">
-                      Bạn đã xác nhận chuyển khoản. Nhân viên đang kiểm tra lịch sử biến động và sẽ duyệt làm ngay!
-                    </p>
                   </div>
                 </div>
 
@@ -336,11 +341,19 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
         {/* Modal Thanh toán QR */}
         <PaymentModal
           isOpen={isPaymentModalOpen}
-          onClose={() => setIsPaymentModalOpen(false)}
+          onClose={() => {
+            setIsPaymentModalOpen(false);
+            if (searchParams.get('pay') === '1') {
+              router.replace(`/track/${order.id}`, { scroll: false });
+            }
+          }}
           orderId={order.id}
           amount={servicePrice}
           serviceName={serviceName}
           onPaymentConfirmed={() => {
+            if (searchParams.get('pay') === '1') {
+              router.replace(`/track/${order.id}`, { scroll: false });
+            }
             setToast({
               message: 'Đã xác nhận chuyển khoản! Nếu sau 30 phút đơn chưa được làm, hãy liên hệ Zalo 0966216495.',
               type: 'info',

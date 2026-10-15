@@ -8,6 +8,8 @@ interface StoredOrder {
   id: string;
   trackingToken: string;
   createdAt: string;
+  isPriority?: boolean;
+  amount?: number;
 }
 
 export default function MyOrdersPage() {
@@ -67,10 +69,16 @@ export default function MyOrdersPage() {
                   className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/80 hover:border-slate-300 transition-colors flex items-center justify-between gap-2"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-mono font-bold text-gray-800 text-xs sm:text-sm bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title={order.id}>
                         ...{order.id.slice(-5)}
                       </span>
+                      {order.isPriority && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-2xs">
+                          <span>⚡</span>
+                          <span>Ưu tiên</span>
+                        </span>
+                      )}
                       <CopyButton text={order.id} title="Sao chép toàn bộ mã đơn" />
                     </div>
                     <p className="text-[11px] text-gray-400 mt-1">

@@ -43,12 +43,16 @@ export interface Order {
   copied?: boolean;
   copiedAt?: Timestamp | null;
   copiedBy?: string | null;
+  isPriority?: boolean;
+  priorityFee?: number;
 }
 
 export interface CreateOrderInput {
   eventCode: string;
   serviceType: ServiceTypeId;
   amount: number;
+  isPriority?: boolean;
+  priorityFee?: number;
 }
 
 export interface UpdateOrderStatusInput {

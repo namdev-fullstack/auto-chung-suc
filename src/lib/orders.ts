@@ -50,6 +50,8 @@ export const createOrder = async (input: CreateOrderInput): Promise<Order> => {
     copied: false,
     copiedAt: null,
     copiedBy: null,
+    isPriority: Boolean(input.isPriority),
+    priorityFee: input.isPriority ? (input.priorityFee ?? 19000) : 0,
   };
 
   const docRef = await addDoc(collection(db, ORDERS_COLLECTION), orderData);

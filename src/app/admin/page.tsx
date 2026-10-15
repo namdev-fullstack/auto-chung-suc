@@ -1716,7 +1716,7 @@ export default function AdminPage() {
 
                               {/* 1. Cột Trạng thái đặt ở đầu - giúp admin trên mobile nhận biết ngay đơn cần duyệt */}
                               <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-sm bg-blue-50/20">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1">
                                   <select
                                     value={order.status}
                                     disabled={actionLoading === `status-${order.id}`}
@@ -1734,11 +1734,19 @@ export default function AdminPage() {
                                     }`}
                                   >
                                     {Object.values(ORDER_STATUS).map((status) => (
-                                      <option key={status} value={status}>
+                                       <option key={status} value={status}>
                                         {STATUS_LABELS[status]}
                                       </option>
                                     ))}
                                   </select>
+                                  {order.isPriority && (
+                                    <span
+                                      className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-amber-100 border border-amber-300 text-amber-700 shadow-2xs shrink-0 select-none text-xs"
+                                      title="Đơn ưu tiên làm trước (+19.000đ)"
+                                    >
+                                      ⚡
+                                    </span>
+                                  )}
                                   {actionLoading === `status-${order.id}` && <Spinner className="h-3.5 w-3.5 text-blue-600" />}
                                 </div>
                               </td>
@@ -1789,7 +1797,12 @@ export default function AdminPage() {
 
                               {/* 5. Cột Dịch vụ */}
                               <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm font-semibold text-gray-900">
-                                {getServiceLabel(services, order.serviceType)}
+                                <div className="flex flex-col">
+                                  <span>{getServiceLabel(services, order.serviceType)}</span>
+                                  <span className="text-[11px] font-bold text-blue-600">
+                                    {(order.amount || 0).toLocaleString('vi-VN')}đ
+                                  </span>
+                                </div>
                               </td>
 
                               {/* 6. Cột Gửi Zalo */}

@@ -176,7 +176,11 @@ export default function DashboardPage() {
     try {
       const pendingOrders = orders
         .filter((order) => order.status === 'pending' && order.paymentStatus === 'paid')
-        .sort((a, b) => toMillis(a.createdAt) - toMillis(b.createdAt));
+        .sort((a, b) => {
+          if (a.isPriority && !b.isPriority) return -1;
+          if (!a.isPriority && b.isPriority) return 1;
+          return toMillis(a.createdAt) - toMillis(b.createdAt);
+        });
 
       const ordersToClaim = pendingOrders.slice(0, bulkClaimCount);
       let claimedCount = 0;
@@ -763,9 +767,19 @@ export default function DashboardPage() {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_BADGES[order.status]}`}>
-                              {STATUS_LABELS[order.status]}
-                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_BADGES[order.status]}`}>
+                                {STATUS_LABELS[order.status]}
+                              </span>
+                              {order.isPriority && (
+                                <span
+                                  className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-amber-100 border border-amber-300 text-amber-700 shadow-2xs shrink-0 select-none text-xs"
+                                  title="Đơn ưu tiên làm trước (+19.000đ)"
+                                >
+                                  ⚡
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex items-center gap-3">

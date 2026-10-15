@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createOrder } from '@/lib/orders';
 import { getActiveServices, getCachedServicesSync } from '@/lib/services';
-import { CONTACT_CONFIG, EVENT_CODE_CONFIG, extractEventCode } from '@/config/constants';
+import { CONTACT_CONFIG, EVENT_CODE_CONFIG, extractEventCode, PRIORITY_ORDER_FEE } from '@/config/constants';
 import { Service } from '@/types/database';
 import { IconCheck, IconFacebook, IconSearch, IconZalo, Spinner } from '@/components/Icons';
 import ParticleBackground from '@/components/ParticleBackground';
@@ -19,6 +19,7 @@ export default function Home() {
     const initial = getCachedServicesSync();
     return initial[0]?.id || 'FULL_3_RUONG';
   });
+  const [isPriority, setIsPriority] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingServices, setLoadingServices] = useState(false);
   const [error, setError] = useState('');
@@ -62,6 +63,9 @@ export default function Home() {
   }, []);
 
   const currentSelected = services.find((s) => s.id === selectedService) || services[0];
+  const basePrice = currentSelected ? currentSelected.price : 0;
+  const priorityFee = isPriority ? PRIORITY_ORDER_FEE : 0;
+  const totalAmount = basePrice + priorityFee;
 
   // Trích xuất mã hiển thị xem trước real-time
   const extractedResult = eventCode.trim() ? extractEventCode(eventCode) : null;
@@ -133,7 +137,9 @@ export default function Home() {
       const order = await createOrder({
         eventCode: codeResult.cleanCode,
         serviceType: selectedService,
-        amount: currentSelected.price,
+        amount: totalAmount,
+        isPriority,
+        priorityFee,
       });
 
       const existingOrders = JSON.parse(localStorage.getItem('myOrders') || '[]');
@@ -141,6 +147,8 @@ export default function Home() {
         id: order.id,
         trackingToken: order.trackingToken,
         createdAt: new Date().toISOString(),
+        isPriority,
+        amount: totalAmount,
       });
       localStorage.setItem('myOrders', JSON.stringify(existingOrders));
 
@@ -337,6 +345,61 @@ export default function Home() {
               )}
             </div>
 
+            {/* Đơn ưu tiên làm trước (+19k) */}
+            <div
+              onClick={() => setIsPriority(!isPriority)}
+              className={`relative rounded-2xl p-3 sm:p-3.5 border-2 cursor-pointer select-none transition-all duration-200 ${
+                isPriority
+                  ? 'border-amber-500 bg-gradient-to-r from-amber-50 via-orange-50/70 to-amber-50 shadow-xs ring-2 ring-amber-500/20'
+                  : 'border-slate-200 hover:border-amber-300 bg-white hover:bg-amber-50/20'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  {/* Icon Checkbox */}
+                  <div
+                    className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                      isPriority
+                        ? 'border-amber-500 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
+                        : 'border-gray-300 bg-white'
+                    }`}
+                  >
+                    {isPriority && <IconCheck className="h-3.5 w-3.5 stroke-[3]" />}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs sm:text-sm font-black text-gray-900 flex items-center gap-1">
+                        <span>⚡</span>
+                        <span>Đơn ưu tiên làm trước</span>
+                      </span>
+                      <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-2xs shrink-0">
+                        +19.000đ
+                      </span>
+                    </div>
+                    <p className="text-[11px] sm:text-xs text-gray-600 mt-0.5 leading-relaxed">
+                      Đơn hàng được gắn cờ ưu tiên hàng đầu, nhân viên tiếp nhận & hoàn thành trước các đơn thường.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Animated Switch Pill */}
+                <div className="shrink-0 flex items-center">
+                  <div
+                    className={`w-11 h-6 flex items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out ${
+                      isPriority ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gray-200'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                        isPriority ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Error Message chung */}
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-xs font-medium">
@@ -364,10 +427,18 @@ export default function Home() {
                   </>
                 ) : (
                   <>
-                    <span>Xác nhận đặt đơn</span>
+                    <span className="flex items-center gap-1.5">
+                      <span>Xác nhận đặt đơn</span>
+                      {isPriority && (
+                        <span className="inline-flex items-center gap-0.5 bg-amber-400 text-amber-950 px-1.5 py-0.5 rounded text-[11px] font-black shadow-2xs">
+                          <span>⚡</span>
+                          <span>Ưu tiên</span>
+                        </span>
+                      )}
+                    </span>
                     {currentSelected && (
                       <span className="bg-white/20 px-2 py-0.5 rounded-lg text-xs font-bold whitespace-nowrap">
-                        {currentSelected.price.toLocaleString('vi-VN')}đ
+                        {totalAmount.toLocaleString('vi-VN')}đ
                       </span>
                     )}
                   </>

@@ -25,14 +25,12 @@ export default function PaymentModal({
   onPaymentConfirmed,
 }: PaymentModalProps) {
   const [loading, setLoading] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState(false);
 
-  // Mỗi khi mở modal, luôn bắt đầu bằng màn hình thanh toán QR & thông tin chuyển khoản
+  // Mỗi khi mở modal, reset lỗi
   useEffect(() => {
     if (isOpen) {
-      setConfirmed(false);
       setError('');
     }
   }, [isOpen]);
@@ -49,7 +47,6 @@ export default function PaymentModal({
     accountName: PAYMENT_CONFIG.ACCOUNT_NAME,
     template: 'compact',
   });
-  const zaloUrl = 'https://zalo.me/0966216495';
 
   const handleDownloadQr = async () => {
     setDownloading(true);
@@ -76,10 +73,10 @@ export default function PaymentModal({
     setError('');
     try {
       await confirmPaymentTransfer(orderId);
-      setConfirmed(true);
       if (onPaymentConfirmed) {
         onPaymentConfirmed();
       }
+      onClose();
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Không thể cập nhật trạng thái. Vui lòng thử lại!');
@@ -116,168 +113,111 @@ export default function PaymentModal({
 
         {/* Content */}
         <div className="p-3.5 sm:p-5 overflow-y-auto space-y-3 sm:space-y-4">
-          {confirmed ? (
-            <div className="py-4 text-center space-y-4 animate-in fade-in zoom-in-95">
-              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-3xl font-bold shadow-md shadow-emerald-500/20">
-                ✓
-              </div>
-              <h4 className="text-xl sm:text-2xl font-extrabold text-gray-900">
-                Đã ghi nhận chuyển khoản!
-              </h4>
-              <p className="text-sm sm:text-base text-gray-600 max-w-sm mx-auto leading-relaxed">
-                Đơn hàng đã được chuyển sang trạng thái <strong className="text-amber-700 font-bold">Đợi nhân viên xác nhận</strong>. Nhân viên sẽ kiểm tra và bắt đầu xử lý ngay.
-              </p>
+          {/* QR Code Container */}
+          <div className="flex flex-col items-center justify-center bg-slate-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200">
+            <div className="relative bg-white p-2 rounded-xl shadow-xs border border-slate-200">
+              <img
+                src={qrUrl}
+                alt={`Mã QR thanh toán cho đơn ${orderId}`}
+                className="w-44 h-44 sm:w-56 sm:h-56 object-contain rounded-lg"
+                loading="eager"
+              />
+            </div>
+            <p className="text-[11px] sm:text-xs text-gray-500 mt-2 text-center font-medium">
+              Mở ứng dụng ngân hàng bất kỳ để quét mã QR
+            </p>
+            <button
+              type="button"
+              onClick={handleDownloadQr}
+              disabled={downloading}
+              className="mt-2 px-3 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-60"
+            >
+              {downloading ? <Spinner className="h-3 w-3" /> : <span>📥</span>}
+              <span>{downloading ? 'Đang tải...' : 'Tải ảnh QR về máy'}</span>
+            </button>
+          </div>
 
-              {/* Hộp thoại thông báo Zalo theo yêu cầu */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-4 text-left space-y-2 shadow-xs">
-                <div className="flex items-start gap-2.5">
-                  <span className="text-xl shrink-0">🔔</span>
-                  <div>
-                    <p className="text-sm sm:text-base font-bold text-blue-900 leading-snug">
-                      Lưu ý hỗ trợ khách hàng:
-                    </p>
-                    <p className="text-xs sm:text-sm text-blue-800 mt-1 leading-relaxed">
-                      Nếu sau <span className="font-bold text-red-600">30 phút</span> đơn của bạn chưa được hoàn thành, vui lòng nhắn tin trực tiếp qua Zalo để được hỗ trợ xử lý ngay lập tức!
-                    </p>
-                  </div>
-                </div>
+          {/* Thông tin chuyển khoản */}
+          <div className="bg-blue-50/70 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-blue-100 space-y-2 sm:space-y-2.5 text-xs sm:text-sm">
+            <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
+              <span className="text-gray-500 shrink-0">Ngân hàng:</span>
+              <span className="font-bold text-gray-900 text-right truncate">{PAYMENT_CONFIG.BANK_NAME}</span>
+            </div>
 
-                <a
-                  href={zaloUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full mt-2 bg-[#0068FF] hover:bg-blue-700 text-white py-2.5 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition-all active:scale-[0.99]"
-                >
-                  <span>Nhắn Zalo: 0966.216.495</span>
-                </a>
-              </div>
-
-              <div className="space-y-2 pt-1">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-bold text-sm transition-colors shadow-md shadow-blue-500/20"
-                >
-                  Đóng & Quay lại chi tiết đơn
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmed(false)}
-                  className="w-full bg-slate-100 hover:bg-slate-200 text-gray-700 py-2.5 px-4 rounded-xl font-semibold text-xs transition-colors"
-                >
-                  Xem lại mã QR & Thông tin chuyển khoản
-                </button>
+            <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
+              <span className="text-gray-500 shrink-0">Số tài khoản:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono font-extrabold text-blue-700 text-sm sm:text-base">
+                  {PAYMENT_CONFIG.ACCOUNT_NO}
+                </span>
+                <CopyButton text={PAYMENT_CONFIG.ACCOUNT_NO} title="Sao chép số tài khoản" />
               </div>
             </div>
-          ) : (
-            <>
-              {/* QR Code Container */}
-              <div className="flex flex-col items-center justify-center bg-slate-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200">
-                <div className="relative bg-white p-2 rounded-xl shadow-xs border border-slate-200">
-                  <img
-                    src={qrUrl}
-                    alt={`Mã QR thanh toán cho đơn ${orderId}`}
-                    className="w-44 h-44 sm:w-56 sm:h-56 object-contain rounded-lg"
-                    loading="eager"
-                  />
-                </div>
-                <p className="text-[11px] sm:text-xs text-gray-500 mt-2 text-center font-medium">
-                  Mở ứng dụng ngân hàng bất kỳ để quét mã QR
-                </p>
-                <button
-                  type="button"
-                  onClick={handleDownloadQr}
-                  disabled={downloading}
-                  className="mt-2 px-3 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-60"
-                >
-                  {downloading ? <Spinner className="h-3 w-3" /> : <span>📥</span>}
-                  <span>{downloading ? 'Đang tải...' : 'Tải ảnh QR về máy'}</span>
-                </button>
+
+            <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
+              <span className="text-gray-500 shrink-0">Chủ tài khoản:</span>
+              <span className="font-bold text-gray-900 uppercase text-xs sm:text-sm text-right truncate">
+                {PAYMENT_CONFIG.ACCOUNT_NAME}
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
+              <span className="text-gray-500 shrink-0">Số tiền:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold text-emerald-600 text-base sm:text-lg">
+                  {amount.toLocaleString('vi-VN')}đ
+                </span>
+                <CopyButton text={amount.toString()} title="Sao chép số tiền" />
               </div>
+            </div>
 
-              {/* Thông tin chuyển khoản */}
-              <div className="bg-blue-50/70 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-blue-100 space-y-2 sm:space-y-2.5 text-xs sm:text-sm">
-                <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
-                  <span className="text-gray-500 shrink-0">Ngân hàng:</span>
-                  <span className="font-bold text-gray-900 text-right truncate">{PAYMENT_CONFIG.BANK_NAME}</span>
-                </div>
-
-                <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
-                  <span className="text-gray-500 shrink-0">Số tài khoản:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-extrabold text-blue-700 text-sm sm:text-base">
-                      {PAYMENT_CONFIG.ACCOUNT_NO}
-                    </span>
-                    <CopyButton text={PAYMENT_CONFIG.ACCOUNT_NO} title="Sao chép số tài khoản" />
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
-                  <span className="text-gray-500 shrink-0">Chủ tài khoản:</span>
-                  <span className="font-bold text-gray-900 uppercase text-xs sm:text-sm text-right truncate">
-                    {PAYMENT_CONFIG.ACCOUNT_NAME}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center py-1 border-b border-blue-100 gap-2">
-                  <span className="text-gray-500 shrink-0">Số tiền:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-extrabold text-emerald-600 text-base sm:text-lg">
-                      {amount.toLocaleString('vi-VN')}đ
-                    </span>
-                    <CopyButton text={amount.toString()} title="Sao chép số tiền" />
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center py-2 bg-amber-50 -mx-1 px-2.5 rounded-lg border border-amber-200 gap-2">
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-amber-900 text-xs sm:text-sm font-bold">Nội dung chuyển khoản:</span>
-                    <span className="text-[10px] sm:text-xs text-amber-700 font-medium">
-                      (Bắt buộc ghi đúng 5 ký tự này)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="font-mono font-extrabold text-amber-900 text-base sm:text-lg bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
-                      {shortId}
-                    </span>
-                    <CopyButton text={shortId} title="Sao chép nội dung chuyển khoản" />
-                  </div>
-                </div>
+            <div className="flex justify-between items-center py-2 bg-amber-50 -mx-1 px-2.5 rounded-lg border border-amber-200 gap-2">
+              <div className="flex flex-col min-w-0">
+                <span className="text-amber-900 text-xs sm:text-sm font-bold">Nội dung chuyển khoản:</span>
+                <span className="text-[10px] sm:text-xs text-amber-700 font-medium">
+                  (Bắt buộc ghi đúng 5 ký tự này)
+                </span>
               </div>
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2">
-                  <IconAlert className="h-4 w-4 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              {/* Hướng dẫn và nút xác nhận */}
-              <div className="pt-1 space-y-2">
-                <button
-                  type="button"
-                  onClick={handleConfirm}
-                  disabled={loading}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white py-3 sm:py-3.5 px-4 rounded-xl sm:rounded-2xl font-bold shadow-md shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 disabled:opacity-60 text-sm sm:text-base active:scale-[0.99]"
-                >
-                  {loading ? <Spinner className="h-5 w-5" /> : <IconCheck className="h-5 w-5" />}
-                  <span>{loading ? 'Đang xác nhận...' : 'Tôi đã chuyển khoản thành công'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full bg-slate-100 hover:bg-slate-200 text-gray-700 py-2 sm:py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm transition-colors text-center"
-                >
-                  Đóng cửa sổ
-                </button>
-
-                <p className="text-center text-[11px] sm:text-xs text-gray-500 leading-relaxed">
-                  Sau khi bạn chuyển tiền xong, bấm nút trên để hệ thống ghi nhận và nhân viên duyệt đơn!
-                </p>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="font-mono font-extrabold text-amber-900 text-base sm:text-lg bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
+                  {shortId}
+                </span>
+                <CopyButton text={shortId} title="Sao chép nội dung chuyển khoản" />
               </div>
-            </>
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2">
+              <IconAlert className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
           )}
+
+          {/* Hướng dẫn và nút xác nhận */}
+          <div className="pt-1 space-y-2">
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={loading}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white py-3 sm:py-3.5 px-4 rounded-xl sm:rounded-2xl font-bold shadow-md shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 disabled:opacity-60 text-sm sm:text-base active:scale-[0.99]"
+            >
+              {loading ? <Spinner className="h-5 w-5" /> : <IconCheck className="h-5 w-5" />}
+              <span>{loading ? 'Đang xác nhận...' : 'Tôi đã chuyển khoản thành công'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full bg-slate-100 hover:bg-slate-200 text-gray-700 py-2 sm:py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm transition-colors text-center"
+            >
+              Đóng cửa sổ
+            </button>
+
+            <p className="text-center text-[11px] sm:text-xs text-gray-500 leading-relaxed">
+              Sau khi bạn chuyển tiền xong, bấm nút trên để hệ thống ghi nhận và nhân viên duyệt đơn!
+            </p>
+          </div>
         </div>
       </div>
     </div>
