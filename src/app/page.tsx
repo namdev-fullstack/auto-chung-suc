@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createOrder } from '@/lib/orders';
-import { getActiveServices, getCachedServicesSync } from '@/lib/services';
+import {
+  getActiveServices,
+  getCachedServicesSync,
+} from '@/lib/services';
 import { CONTACT_CONFIG, EVENT_CODE_CONFIG, extractEventCode, PRIORITY_ORDER_FEE } from '@/config/constants';
 import { Service } from '@/types/database';
 import { IconCheck, IconFacebook, IconSearch, IconZalo, Spinner } from '@/components/Icons';
@@ -178,10 +181,6 @@ export default function Home() {
       <div className="relative z-10 max-w-md mx-auto w-full">
         {/* Card Header & Brand */}
         <div className="text-center mb-4 sm:mb-5">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/90 backdrop-blur-md text-blue-700 rounded-full text-[11px] sm:text-xs font-bold mb-2 tracking-wide shadow-xs border border-blue-100">
-            <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping"></span>
-            Hệ Thống Tương Tác Sự Kiện LQ
-          </div>
           <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight leading-tight">
             Auto Chung Sức - TachiOni
           </h1>
@@ -340,7 +339,7 @@ export default function Home() {
                 </p>
               ) : (
                 <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed text-left">
-                  💡 Dán mã hoặc toàn bộ tin nhắn chia sẻ từ game, hệ thống sẽ tự động lọc đúng {EVENT_CODE_CONFIG.REQUIRED_LENGTH} ký tự mã.
+                  💡 Dán mã hoặc toàn bộ tin nhắn chia sẻ từ trong sự kiện, hệ thống sẽ tự động lọc đúng {EVENT_CODE_CONFIG.REQUIRED_LENGTH} ký tự mã.
                 </p>
               )}
             </div>

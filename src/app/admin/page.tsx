@@ -141,6 +141,7 @@ export default function AdminPage() {
     originalPrice: 0,
     active: true,
   });
+
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
@@ -1797,12 +1798,7 @@ export default function AdminPage() {
 
                               {/* 5. Cột Dịch vụ */}
                               <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm font-semibold text-gray-900">
-                                <div className="flex flex-col">
-                                  <span>{getServiceLabel(services, order.serviceType)}</span>
-                                  <span className="text-[11px] font-bold text-blue-600">
-                                    {(order.amount || 0).toLocaleString('vi-VN')}đ
-                                  </span>
-                                </div>
+                                {getServiceLabel(services, order.serviceType)}
                               </td>
 
                               {/* 6. Cột Gửi Zalo */}
@@ -1851,22 +1847,11 @@ export default function AdminPage() {
                                     <button
                                       onClick={() => handleUpdateStatus(order, 'processing')}
                                       disabled={actionLoading === `status-${order.id}`}
-                                      className="text-blue-600 hover:text-blue-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                                      className="px-2 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold cursor-pointer shadow-2xs"
                                       title="Reset lại trạng thái Đang làm"
                                     >
                                       {actionLoading === `status-${order.id}` ? <Spinner /> : <IconRefresh />}
                                       Reset
-                                    </button>
-                                  )}
-                                  {order.status === 'pending' && (
-                                    <button
-                                      onClick={() => handleUpdateStatus(order, 'cancelled')}
-                                      disabled={actionLoading === `status-${order.id}`}
-                                      className="text-amber-600 hover:text-amber-900 disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold cursor-pointer"
-                                      title="Hủy đơn hàng"
-                                    >
-                                      {actionLoading === `status-${order.id}` ? <Spinner /> : <IconX />}
-                                      Hủy
                                     </button>
                                   )}
 
@@ -1874,7 +1859,7 @@ export default function AdminPage() {
                                   <button
                                     onClick={() => handleDeleteOrder(order)}
                                     disabled={actionLoading === `delete-${order.id}`}
-                                    className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 cursor-pointer"
+                                    className="p-1.5 rounded-lg bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 hover:border-red-300 transition-colors disabled:opacity-50 cursor-pointer shadow-2xs flex items-center justify-center"
                                     title="Xóa đơn hàng"
                                   >
                                     {actionLoading === `delete-${order.id}` ? (
@@ -1883,6 +1868,19 @@ export default function AdminPage() {
                                       <IconTrash className="h-4 w-4" />
                                     )}
                                   </button>
+
+                                  {/* Nút Hủy đơn */}
+                                  {order.status === 'pending' && (
+                                    <button
+                                      onClick={() => handleUpdateStatus(order, 'cancelled')}
+                                      disabled={actionLoading === `status-${order.id}`}
+                                      className="px-2 py-1 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 hover:border-amber-400 transition-colors disabled:opacity-60 inline-flex items-center gap-1 text-xs font-semibold cursor-pointer shadow-2xs"
+                                      title="Hủy đơn hàng"
+                                    >
+                                      {actionLoading === `status-${order.id}` ? <Spinner /> : <IconX />}
+                                      Hủy
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
