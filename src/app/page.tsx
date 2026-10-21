@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { createOrder } from '@/lib/orders';
 import {
   getActiveServices,
@@ -12,7 +13,8 @@ import { Service } from '@/types/database';
 import { IconCheck, IconFacebook, IconSearch, IconZalo, Spinner } from '@/components/Icons';
 import ParticleBackground from '@/components/ParticleBackground';
 import FloatingMinigameIcon from '@/components/minigame/FloatingMinigameIcon';
-import VideoGuideModal from '@/components/VideoGuideModal';
+
+const VideoGuideModal = dynamic(() => import('@/components/VideoGuideModal'), { ssr: false });
 
 export default function Home() {
   const router = useRouter();
@@ -73,8 +75,10 @@ export default function Home() {
   const priorityFee = isPriority ? PRIORITY_ORDER_FEE : 0;
   const totalAmount = basePrice + priorityFee;
 
-  // Trích xuất mã hiển thị xem trước real-time
-  const extractedResult = eventCode.trim() ? extractEventCode(eventCode) : null;
+  // Trích xuất mã hiển thị xem trước real-time dùng useMemo tránh tính lại khi re-render
+  const extractedResult = useMemo(() => {
+    return eventCode.trim() ? extractEventCode(eventCode) : null;
+  }, [eventCode]);
 
   const handleEventCodeChange = (value: string) => {
     setEventCode(value);
@@ -172,12 +176,12 @@ export default function Home() {
 
   return (
     <main className="relative min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-blue-50/40 py-4 sm:py-9 px-3.5 sm:px-6 overflow-hidden flex flex-col justify-center">
-      {/* Hiệu ứng hạt ánh sáng tương tác mượt mà trên di động */}
+      {/* Hiệu ứng hạt ánh sáng tương tác mượt mà trên desktop */}
       <ParticleBackground />
 
-      {/* Ánh sáng mờ nghệ thuật nền (Ambient Blur Orbs) */}
+      {/* Ánh sáng nền công nghệ nhẹ nhàng (CSS radial gradient thuần, không filter blur tốn GPU) */}
       <div
-        className="absolute top-6 left-1/2 -translate-x-1/2 w-[340px] sm:w-[480px] h-[340px] bg-gradient-to-tr from-blue-400/20 via-indigo-400/15 to-purple-400/20 rounded-full blur-3xl pointer-events-none"
+        className="absolute top-0 left-1/2 -translate-x-1/2 w-[360px] sm:w-[500px] h-[360px] bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.1)_0%,rgba(147,197,253,0.05)_45%,transparent_70%)] pointer-events-none"
         aria-hidden="true"
       />
 
@@ -192,8 +196,8 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Form Container */}
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/80 border border-white p-4 sm:p-6 transition-all">
+        {/* Form Container (bỏ backdrop-blur-sm để cuộn và gõ siêu mượt 120fps trên iOS) */}
+        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/70 border border-slate-100 p-4 sm:p-6 transition-all">
           <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4">
             {/* Service Selection */}
             <div>
@@ -330,6 +334,10 @@ export default function Home() {
                   value={eventCode}
                   onChange={(e) => handleEventCodeChange(e.target.value)}
                   placeholder="Dán mã hoặc lời mời sự kiện vào đây"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   className={`w-full px-3.5 py-3 bg-slate-50 border rounded-xl focus:bg-white text-sm font-medium transition-all ${
                     inputError
                       ? 'border-red-500 ring-2 ring-red-500/20 bg-red-50/20 focus:border-red-500 focus:ring-red-500/30'
@@ -546,11 +554,13 @@ export default function Home() {
       {/* Floating Minigame Rotating Icon */}
       <FloatingMinigameIcon />
 
-      {/* Modal Hướng dẫn lấy mã qua Video */}
-      <VideoGuideModal
-        isOpen={isVideoGuideOpen}
-        onClose={() => setIsVideoGuideOpen(false)}
-      />
+      {/* Modal Hướng dẫn lấy mã qua Video (chỉ nạp khi khách bấm xem) */}
+      {isVideoGuideOpen && (
+        <VideoGuideModal
+          isOpen={isVideoGuideOpen}
+          onClose={() => setIsVideoGuideOpen(false)}
+        />
+      )}
     </main>
   );
 }

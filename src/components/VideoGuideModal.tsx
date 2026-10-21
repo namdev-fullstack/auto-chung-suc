@@ -111,7 +111,7 @@ export default function VideoGuideModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
@@ -120,7 +120,7 @@ export default function VideoGuideModal({
         className="bg-slate-900 text-white w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-slate-700/80 max-h-[90vh]"
       >
         {/* Header Modal */}
-        <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-800/90 border-b border-slate-700/80 flex items-center justify-between gap-3">
+        <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-800 border-b border-slate-700/80 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-lg">🎬</span>
             <h3 className="font-bold text-sm sm:text-base text-white truncate">
@@ -166,7 +166,7 @@ export default function VideoGuideModal({
                 src={videoUrl}
                 controls
                 playsInline
-                autoPlay
+                preload="none"
                 className="w-full max-h-[65vh] object-contain"
                 onError={() => setHasError(true)}
               >

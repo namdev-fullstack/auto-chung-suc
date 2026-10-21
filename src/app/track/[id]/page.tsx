@@ -6,6 +6,7 @@ import {
   subscribeToOrder,
   cancelExpiredOrderIfTimeout,
   isOrderPaymentExpired,
+  getOrderCreatedTime,
 } from '@/lib/orders';
 import { getServiceById } from '@/lib/services';
 import { Order, Service } from '@/types/database';
@@ -86,15 +87,15 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
         return;
       }
 
-      // Hẹn giờ kiểm tra định kỳ để kích hoạt hủy ngay khi chạm mốc 5 phút
-      const interval = setInterval(() => {
-        if (isOrderPaymentExpired(order, 5)) {
-          cancelExpiredOrderIfTimeout(order);
-          clearInterval(interval);
-        }
-      }, 3000);
+      // Tính chính xác số mili-giây còn lại đến mốc 5 phút thay vì setInterval liên tục
+      const createdTime = getOrderCreatedTime(order.createdAt) || Date.now();
+      const msLeft = Math.max(1000, 5 * 60 * 1000 - (Date.now() - createdTime));
 
-      return () => clearInterval(interval);
+      const timer = setTimeout(() => {
+        cancelExpiredOrderIfTimeout(order);
+      }, msLeft + 500);
+
+      return () => clearTimeout(timer);
     }
   }, [order]);
 
@@ -249,7 +250,7 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
               <div className="bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-2xl p-4 sm:p-5 space-y-3 shadow-xs">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl shrink-0">
-                    <IconClock className="h-6 w-6 animate-spin text-amber-700" />
+                    <IconClock className="h-6 w-6 text-amber-700" />
                   </div>
                   <div>
                     <h3 className="text-base sm:text-lg font-extrabold text-amber-900">

@@ -128,7 +128,7 @@ export default function PaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/65 animate-in fade-in duration-150">
       <div
         className="bg-white w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-gray-100"
         onClick={(e) => e.stopPropagation()}
@@ -136,7 +136,7 @@ export default function PaymentModal({
         {/* Header */}
         <div className="px-4 py-3 sm:px-5 sm:py-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white flex justify-between items-center relative">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 sm:p-2 bg-white/10 rounded-xl backdrop-blur-md">
+            <div className="p-1.5 sm:p-2 bg-white/20 rounded-xl">
               <IconQrCode className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
             <div>

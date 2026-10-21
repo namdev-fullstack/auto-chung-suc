@@ -15,6 +15,16 @@ export default function MinigameBackground3D({
   const mountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Tắt WebGL 3D trên mobile và màn hình cảm ứng để tiết kiệm pin và tránh nghẽn GPU
+    if (
+      typeof window !== 'undefined' &&
+      (window.innerWidth < 768 ||
+        (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    ) {
+      return;
+    }
+
     const container = mountRef.current;
     if (!container) return;
 
