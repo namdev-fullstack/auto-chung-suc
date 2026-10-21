@@ -69,5 +69,17 @@ service cloud.firestore {
     match /orders {
       allow list: if isAuthenticated() && (isAdmin() || isActiveEmployee());
     }
+
+    // Minigame Settings: public read for players, admin write
+    match /game_settings/{documentId} {
+      allow read: if true;
+      allow write: if isAuthenticated() && isAdmin();
+    }
+
+    // Minigame Winners: public read for scoreboard, admin write
+    match /winners/{winnerId} {
+      allow read: if true;
+      allow write: if isAuthenticated() && isAdmin();
+    }
   }
 }

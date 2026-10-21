@@ -16,7 +16,10 @@ import {
   batchUpdateOrdersPaymentStatus,
   deleteOrder,
   batchDeleteOrders,
+  checkAndCancelExpiredOrders,
+  isOrderPaymentExpired,
 } from '@/lib/orders';
+
 import { getAllEmployees, createEmployee, updateEmployee } from '@/lib/employees';
 import {
   createService,
@@ -240,12 +243,32 @@ export default function AdminPage() {
       }
 
       const ordersData = await getOrders(filters);
-      setOrders(ordersData);
+      // Tự động kiểm tra và chuyển các đơn quá 5 phút chưa thanh toán sang 'cancelled'
+      const verifiedOrders = await checkAndCancelExpiredOrders(ordersData);
+      setOrders(verifiedOrders);
       setCurrentPage(1);
     } catch (error) {
       console.error('Error loading orders:', error);
     }
   };
+
+  // Quét định kỳ mỗi 15 giây: tự động chuyển các đơn unpaid quá 5 phút sang 'cancelled'
+  useEffect(() => {
+    if (!employee) return;
+    const interval = setInterval(() => {
+      setOrders((prev) => {
+        const hasExpired = prev.some((o) => isOrderPaymentExpired(o, 5));
+        if (!hasExpired) return prev;
+        checkAndCancelExpiredOrders(prev).then((updated) => {
+          setOrders(updated);
+        });
+        return prev;
+      });
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [employee]);
+
 
   const loadServicesList = async () => {
     const servicesData = await getServices();
@@ -938,6 +961,13 @@ export default function AdminPage() {
                   loadOrders();
                 }}
               />
+              <button
+                onClick={() => router.push('/admin/lucky-lock')}
+                className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-black text-xs sm:text-sm px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg shadow-sm hover:shadow transition-all flex items-center gap-1"
+                title="Mở màn hình minigame ổ khoá vali livestream"
+              >
+                <span>🔐 Lucky Lock</span>
+              </button>
               <button
                 onClick={() => router.push('/dashboard')}
                 className="text-blue-600 hover:text-blue-800 font-semibold text-xs sm:text-sm px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors"
@@ -1670,6 +1700,9 @@ export default function AdminPage() {
                         Mã đơn
                       </th>
                       <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Thời gian
+                      </th>
+                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Mã sự kiện
                       </th>
                       <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1677,9 +1710,6 @@ export default function AdminPage() {
                       </th>
                       <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Gửi Zalo
-                      </th>
-                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Thời gian
                       </th>
                       <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Hành động
@@ -1696,6 +1726,7 @@ export default function AdminPage() {
                         </tr>
                         {groupedCurrentOrders[date].map((order) => {
                           const isSelected = selectedOrderIds.has(order.id);
+                          const isCancelled = order.status === 'cancelled';
                           return (
                             <tr
                               key={order.id}
@@ -1703,6 +1734,8 @@ export default function AdminPage() {
                               className={`transition-colors cursor-pointer select-none ${
                                 isSelected
                                   ? 'bg-blue-50/90 hover:bg-blue-100/80 ring-1 ring-inset ring-blue-300'
+                                  : isCancelled
+                                  ? 'bg-slate-200/95 hover:bg-slate-300/90 text-slate-500 opacity-75'
                                   : 'hover:bg-gray-50/80'
                               }`}
                             >
@@ -1716,7 +1749,7 @@ export default function AdminPage() {
                               </td>
 
                               {/* 1. Cột Trạng thái đặt ở đầu - giúp admin trên mobile nhận biết ngay đơn cần duyệt */}
-                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-sm bg-blue-50/20">
+                              <td className={`px-3 sm:px-4 py-3 whitespace-nowrap text-sm ${isCancelled ? 'bg-slate-200/60' : 'bg-blue-50/20'}`}>
                                 <div className="flex items-center gap-1">
                                   <select
                                     value={order.status}
@@ -1731,7 +1764,7 @@ export default function AdminPage() {
                                         ? 'bg-amber-100 text-amber-900 border-amber-400 font-extrabold'
                                         : order.status === 'error'
                                         ? 'bg-red-50 text-red-800 border-red-300'
-                                        : 'bg-gray-100 text-gray-800 border-gray-300'
+                                        : 'bg-slate-300 text-slate-700 border-slate-400'
                                     }`}
                                   >
                                     {Object.values(ORDER_STATUS).map((status) => (
@@ -1740,6 +1773,7 @@ export default function AdminPage() {
                                       </option>
                                     ))}
                                   </select>
+
                                   {order.isPriority && (
                                     <span
                                       className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-amber-100 border border-amber-300 text-amber-700 shadow-2xs shrink-0 select-none text-xs"
@@ -1760,7 +1794,9 @@ export default function AdminPage() {
                                     disabled={actionLoading === `pay-${order.id}`}
                                     onChange={(e) => handleUpdatePaymentStatus(order, e.target.value as PaymentStatus)}
                                     className={`text-xs font-bold px-2 py-1 rounded-lg border cursor-pointer focus:ring-2 focus:ring-blue-500 transition-colors shadow-2xs ${
-                                      order.paymentStatus === 'paid'
+                                      isCancelled
+                                        ? 'bg-slate-300 text-slate-700 border-slate-400'
+                                        : order.paymentStatus === 'paid'
                                         ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                                         : order.paymentStatus === 'pending_verification'
                                         ? 'bg-amber-100 text-amber-900 border-amber-400 font-extrabold'
@@ -1776,17 +1812,30 @@ export default function AdminPage() {
                               </td>
 
                               {/* 3. Cột Mã đơn */}
-                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
+                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs font-medium">
                                 <div className="flex items-center gap-1" title={`Mã đơn đầy đủ: ${order.id}`}>
                                   <span className="text-gray-400 font-mono text-[10px] select-none">...</span>
-                                  <span className="font-mono font-bold text-gray-800 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-xs shadow-2xs">
+                                  <span className={`font-mono font-bold px-1.5 py-0.5 rounded text-xs shadow-2xs ${
+                                    isCancelled
+                                      ? 'bg-slate-300 text-slate-700 border border-slate-400 line-through'
+                                      : 'bg-slate-100 border border-slate-200 text-gray-800'
+                                  }`}>
                                     {order.id.slice(-5)}
                                   </span>
                                   <CopyButton text={order.id} title={`Sao chép toàn bộ mã đơn (${order.id})`} />
                                 </div>
                               </td>
 
-                              {/* 4. Cột Mã sự kiện */}
+
+                              {/* 4. Cột Thời gian (nằm bên phải cột Mã đơn) */}
+                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-[11px] sm:text-xs text-gray-600">
+                                <div className="flex items-center gap-1">
+                                  <IconClock className="h-3 w-3 text-gray-400 shrink-0" />
+                                  <span className="font-mono">{formatFullTime(order.createdAt)}</span>
+                                </div>
+                              </td>
+
+                              {/* 5. Cột Mã sự kiện */}
                               <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                                 <div className="flex items-center gap-1 max-w-[150px] sm:max-w-xs">
                                   <span className="truncate font-mono text-xs" title={order.eventCode}>
@@ -1796,12 +1845,12 @@ export default function AdminPage() {
                                 </div>
                               </td>
 
-                              {/* 5. Cột Dịch vụ */}
+                              {/* 6. Cột Dịch vụ */}
                               <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs sm:text-sm font-semibold text-gray-900">
                                 {getServiceLabel(services, order.serviceType)}
                               </td>
 
-                              {/* 6. Cột Gửi Zalo */}
+                              {/* 7. Cột Gửi Zalo */}
                               <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-xs">
                                 {order.copied ? (
                                   <div className="flex items-center gap-1">
@@ -1830,14 +1879,6 @@ export default function AdminPage() {
                                     Chưa copy
                                   </span>
                                 )}
-                              </td>
-
-                              {/* 7. Cột Thời gian */}
-                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-[11px] sm:text-xs text-gray-600">
-                                <div className="flex items-center gap-1">
-                                  <IconClock className="h-3 w-3 text-gray-400 shrink-0" />
-                                  <span className="font-mono">{formatFullTime(order.createdAt)}</span>
-                                </div>
                               </td>
 
                               {/* 8. Cột Hành động */}

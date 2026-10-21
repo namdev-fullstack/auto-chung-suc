@@ -2,7 +2,11 @@
 
 import { useEffect, useState, use } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { subscribeToOrder } from '@/lib/orders';
+import {
+  subscribeToOrder,
+  cancelExpiredOrderIfTimeout,
+  isOrderPaymentExpired,
+} from '@/lib/orders';
 import { getServiceById } from '@/lib/services';
 import { Order, Service } from '@/types/database';
 import { PAYMENT_STATUS_BADGES, PAYMENT_STATUS_LABELS } from '@/config/constants';
@@ -61,12 +65,39 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
     return () => unsubscribe();
   }, [orderId]);
 
-  // Tự động mở modal thanh toán nếu có query ?pay=1 và đơn chưa thanh toán
+  // Tự động mở modal thanh toán nếu có query ?pay=1 và đơn chưa thanh toán và chưa bị hủy
   useEffect(() => {
-    if (searchParams.get('pay') === '1' && order && order.paymentStatus === 'unpaid') {
+    if (
+      searchParams.get('pay') === '1' &&
+      order &&
+      order.paymentStatus === 'unpaid' &&
+      order.status !== 'cancelled'
+    ) {
       setIsPaymentModalOpen(true);
     }
   }, [searchParams, order]);
+
+  // Tự động hủy đơn hàng nếu sau 5 phút khách không chuyển tiền
+  useEffect(() => {
+    if (!order) return;
+    if (order.paymentStatus === 'unpaid' && order.status === 'pending') {
+      if (isOrderPaymentExpired(order, 5)) {
+        cancelExpiredOrderIfTimeout(order);
+        return;
+      }
+
+      // Hẹn giờ kiểm tra định kỳ để kích hoạt hủy ngay khi chạm mốc 5 phút
+      const interval = setInterval(() => {
+        if (isOrderPaymentExpired(order, 5)) {
+          cancelExpiredOrderIfTimeout(order);
+          clearInterval(interval);
+        }
+      }, 3000);
+
+      return () => clearInterval(interval);
+    }
+  }, [order]);
+
 
   if (loading) {
     return (
@@ -149,7 +180,7 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
                   )}
                 </div>
                 <h1 className="text-lg sm:text-2xl font-extrabold mt-0.5 truncate">
-                  Đơn #{order.id.slice(-6)}
+                  Đơn #{order.id.slice(-5)}
                 </h1>
               </div>
               <span
@@ -161,8 +192,32 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
           </div>
 
           <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
-            {/* Payment Callout Section */}
-            {order.paymentStatus === 'unpaid' && (
+            {/* Nếu đơn bị hủy */}
+            {order.status === 'cancelled' && (
+              <div className="bg-slate-100 border-2 border-slate-300 rounded-2xl p-4 sm:p-5 space-y-2.5 text-center shadow-xs">
+                <div className="w-11 h-11 bg-slate-200 text-slate-600 rounded-full flex items-center justify-center mx-auto text-xl font-black">
+                  ✕
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-gray-800">
+                  Đơn hàng đã bị hủy
+                </h3>
+                <p className="text-xs sm:text-sm text-gray-500 max-w-sm mx-auto leading-relaxed">
+                  {order.errorMessage || 'Đơn hàng tự động hủy do quá 5 phút chưa nhận được chuyển khoản.'}
+                </p>
+                <div className="pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => router.push('/')}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white text-xs sm:text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-xs"
+                  >
+                    <span>+ Đặt lại đơn mới</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Payment Callout Section - chỉ hiện khi chưa thanh toán và chưa bị hủy */}
+            {order.paymentStatus === 'unpaid' && order.status !== 'cancelled' && (
               <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-xs">
                 <div className="flex items-start gap-3">
                   <div className="p-2.5 bg-red-100 text-red-600 rounded-xl shrink-0 mt-0.5">
@@ -173,7 +228,7 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
                       Đơn hàng chưa thanh toán
                     </h3>
                     <p className="text-xs sm:text-sm text-red-700 mt-1 leading-relaxed">
-                      Vui lòng quét mã QR chuyển khoản để nhân viên tiếp nhận và xử lý đơn ngay cho bạn.
+                      Vui lòng quét mã QR chuyển khoản trong vòng 5 phút để nhân viên tiếp nhận và xử lý đơn ngay cho bạn.
                     </p>
                   </div>
                 </div>
@@ -188,6 +243,7 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
                 </button>
               </div>
             )}
+
 
             {order.paymentStatus === 'pending_verification' && (
               <div className="bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-2xl p-4 sm:p-5 space-y-3 shadow-xs">
@@ -308,13 +364,20 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
                 </span>
               </div>
 
-              <div className="flex justify-between items-center py-2.5 sm:py-3 gap-2">
-                <span className="text-gray-500 font-medium shrink-0">Tiến độ thực hiện</span>
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border shrink-0 ${STATUS_BADGES[order.status]}`}
-                >
-                  {STATUS_LABELS[order.status]}
-                </span>
+              <div className="py-2.5 sm:py-3">
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-gray-500 font-medium shrink-0">Tiến độ thực hiện</span>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border shrink-0 ${STATUS_BADGES[order.status]}`}
+                  >
+                    {STATUS_LABELS[order.status]}
+                  </span>
+                </div>
+                {order.status === 'processing' && (
+                  <p className="text-[11px] sm:text-xs text-amber-600 font-medium mt-1 text-right">
+                    15p vào game kiểm tra 1 lần
+                  </p>
+                )}
               </div>
 
               {order.employeeName && (
@@ -350,6 +413,10 @@ export default function TrackOrderPage({ params }: { params: Promise<{ id: strin
           orderId={order.id}
           amount={servicePrice}
           serviceName={serviceName}
+          createdAt={order.createdAt}
+          onExpired={() => {
+            cancelExpiredOrderIfTimeout(order);
+          }}
           onPaymentConfirmed={() => {
             if (searchParams.get('pay') === '1') {
               router.replace(`/track/${order.id}`, { scroll: false });

@@ -10,3 +10,7 @@ NEXT_PUBLIC_EVENT_CODE_LENGTH=10
 
 # Link liên hệ Facebook
 NEXT_PUBLIC_FACEBOOK_URL=https://www.facebook.com/namdev1029
+
+# Google Apps Script Webhook URL cho MiniGame Quay Số Livestream
+# Triển khai Web App từ file google-apps-script/Code.gs với quyền "Bất kỳ ai" (Anyone)
+NEXT_PUBLIC_GOOGLE_SCRIPT_URL=https://script.google.com/macros/s/your_deployment_id/exec

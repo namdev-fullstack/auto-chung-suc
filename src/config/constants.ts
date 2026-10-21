@@ -161,3 +161,11 @@ export const getSepayQrUrl = (amount: number, orderId: string) => {
   return `https://qr.sepay.vn/img?bank=${bank}&acc=${acc}&template=${PAYMENT_CONFIG.TEMPLATE}&amount=${amount}&des=${des}`;
 };
 
+// Cấu hình video hướng dẫn lấy mã sự kiện
+export const VIDEO_GUIDE_CONFIG = {
+  // Có thể đặt file video vào thư mục /public/guide.mp4 hoặc dán URL video / YouTube
+  VIDEO_URL: process.env.NEXT_PUBLIC_VIDEO_GUIDE_URL || '/guide.mp4',
+  TITLE: 'Hướng dẫn lấy mã sự kiện Chung Sức',
+};
+
+

@@ -11,6 +11,8 @@ import { CONTACT_CONFIG, EVENT_CODE_CONFIG, extractEventCode, PRIORITY_ORDER_FEE
 import { Service } from '@/types/database';
 import { IconCheck, IconFacebook, IconSearch, IconZalo, Spinner } from '@/components/Icons';
 import ParticleBackground from '@/components/ParticleBackground';
+import FloatingMinigameIcon from '@/components/minigame/FloatingMinigameIcon';
+import VideoGuideModal from '@/components/VideoGuideModal';
 
 export default function Home() {
   const router = useRouter();
@@ -26,6 +28,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [loadingServices, setLoadingServices] = useState(false);
   const [error, setError] = useState('');
+  const [isVideoGuideOpen, setIsVideoGuideOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -96,7 +99,7 @@ export default function Home() {
     let isSpecial = false;
 
     if (index === 0 || service.id === 'FULL_3_RUONG') {
-      tagText = '👑 KHUYÊN DÙNG';
+      tagText = '👑 Chọn Nhiều';
       isSpecial = true;
     } else if (index === 1 || service.id === 'RUONG_SS') {
       tagText = '🔥 SIÊU HOT';
@@ -302,13 +305,24 @@ export default function Home() {
 
             {/* Event Code Input */}
             <div>
-              <label
-                htmlFor="eventCode"
-                className="text-xs sm:text-sm font-extrabold text-gray-800 flex items-center gap-0.5 mb-1.5"
-              >
-                <span>Mã Sk chung sức</span>
-                <span className="text-red-500 font-bold">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="eventCode"
+                  className="text-xs sm:text-sm font-extrabold text-gray-800 flex items-center gap-0.5"
+                >
+                  <span>Mã Sk chung sức</span>
+                  <span className="text-red-500 font-bold">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsVideoGuideOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-95 px-2.5 py-0.5 rounded-lg border border-blue-200/80 transition-all cursor-pointer shadow-2xs"
+                  title="Xem video hướng dẫn cách lấy mã sự kiện"
+                >
+                  <span>▶️</span>
+                  <span>Hướng dẫn lấy mã</span>
+                </button>
+              </div>
               <div className="relative">
                 <input
                   type="text"
@@ -528,6 +542,15 @@ export default function Home() {
           </p>
         </div>
       </div>
+
+      {/* Floating Minigame Rotating Icon */}
+      <FloatingMinigameIcon />
+
+      {/* Modal Hướng dẫn lấy mã qua Video */}
+      <VideoGuideModal
+        isOpen={isVideoGuideOpen}
+        onClose={() => setIsVideoGuideOpen(false)}
+      />
     </main>
   );
 }

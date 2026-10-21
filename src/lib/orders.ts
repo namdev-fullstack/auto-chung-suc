@@ -478,4 +478,83 @@ export const batchDeleteOrders = async (orderIds: string[]): Promise<void> => {
   await batch.commit();
 };
 
+/**
+ * Lấy mốc thời gian tạo đơn tính bằng milliseconds an toàn từ Firestore Timestamp hoặc Date/string
+ */
+export const getOrderCreatedTime = (createdAt: any): number => {
+  if (!createdAt) return 0;
+  if (typeof createdAt?.toMillis === 'function') return createdAt.toMillis();
+  if (typeof createdAt?.seconds === 'number') return createdAt.seconds * 1000;
+  if (typeof createdAt === 'string' || typeof createdAt === 'number') {
+    const t = new Date(createdAt).getTime();
+    return isNaN(t) ? 0 : t;
+  }
+  if (createdAt instanceof Date) return createdAt.getTime();
+  return 0;
+};
+
+/**
+ * Kiểm tra xem đơn hàng chưa thanh toán có bị quá thời hạn (mặc định 5 phút) hay không
+ */
+export const isOrderPaymentExpired = (order: Order, timeoutMinutes = 5): boolean => {
+  // Chỉ kiểm tra các đơn chưa thanh toán và đang ở trạng thái pending (chưa được nhân viên claim/làm)
+  if (order.paymentStatus !== 'unpaid') return false;
+  if (order.status !== 'pending') return false;
+  const createdTime = getOrderCreatedTime(order.createdAt);
+  if (!createdTime) return false;
+  return Date.now() - createdTime >= timeoutMinutes * 60 * 1000;
+};
+
+/**
+ * Tự động hủy một đơn hàng hết hạn 5 phút chưa thanh toán
+ */
+export const cancelExpiredOrderIfTimeout = async (order: Order, timeoutMinutes = 5): Promise<boolean> => {
+  if (!isOrderPaymentExpired(order, timeoutMinutes)) return false;
+  try {
+    const orderRef = doc(db, ORDERS_COLLECTION, order.id);
+    await updateDoc(orderRef, {
+      status: 'cancelled',
+      errorMessage: 'Tự động hủy: Quá 5 phút khách không chuyển tiền',
+    });
+    return true;
+  } catch (err) {
+    console.warn('Lỗi khi tự động hủy đơn hết hạn 5p:', err);
+    return false;
+  }
+};
+
+/**
+ * Quét danh sách đơn hàng và tự động cập nhật trạng thái 'cancelled' cho các đơn quá 5 phút chưa thanh toán
+ */
+export const checkAndCancelExpiredOrders = async (orders: Order[], timeoutMinutes = 5): Promise<Order[]> => {
+  const expiredOrders = orders.filter((o) => isOrderPaymentExpired(o, timeoutMinutes));
+  if (expiredOrders.length === 0) return orders;
+
+  try {
+    const batch = writeBatch(db);
+    for (const exp of expiredOrders) {
+      const ref = doc(db, ORDERS_COLLECTION, exp.id);
+      batch.update(ref, {
+        status: 'cancelled',
+        errorMessage: 'Tự động hủy: Quá 5 phút khách không chuyển tiền',
+      });
+    }
+    await batch.commit();
+  } catch (err) {
+    console.warn('Lỗi khi batch update hủy đơn hết hạn:', err);
+  }
+
+  const expiredIds = new Set(expiredOrders.map((o) => o.id));
+  return orders.map((o) =>
+    expiredIds.has(o.id)
+      ? {
+          ...o,
+          status: 'cancelled' as const,
+          errorMessage: 'Tự động hủy: Quá 5 phút khách không chuyển tiền',
+        }
+      : o
+  );
+};
+
+
 

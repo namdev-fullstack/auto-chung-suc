@@ -186,7 +186,7 @@ export const listenForOrderNotifications = (
           // A) Có khách vừa đặt đơn mới
           if (change.type === 'added' && !seenNewIds.has(order.id)) {
             seenNewIds.add(order.id);
-            const msg = `Đơn mới #${order.id.slice(-6)} (${order.amount.toLocaleString('vi-VN')}đ) đang chờ duyệt!`;
+            const msg = `Đơn mới #${order.id.slice(-5)} (${order.amount.toLocaleString('vi-VN')}đ) đang chờ duyệt!`;
             sendSystemNotification({
               title: '🔔 CÓ ĐƠN HÀNG MỚI!',
               body: msg,
@@ -203,7 +203,7 @@ export const listenForOrderNotifications = (
             !seenVerifyIds.has(order.id)
           ) {
             seenVerifyIds.add(order.id);
-            const msg = `Khách vừa xác nhận chuyển khoản đơn #${order.id.slice(-6)}!`;
+            const msg = `Khách vừa xác nhận chuyển khoản đơn #${order.id.slice(-5)}!`;
             sendSystemNotification({
               title: '💳 KHÁCH ĐÃ CHUYỂN TIỀN!',
               body: msg,
@@ -222,7 +222,7 @@ export const listenForOrderNotifications = (
 
           if (isAvailableToClaim && !seenPaidIds.has(order.id)) {
             seenPaidIds.add(order.id);
-            const msg = `Đơn #${order.id.slice(-6)} đã thanh toán! Vào nhận đơn làm ngay.`;
+            const msg = `Đơn #${order.id.slice(-5)} đã thanh toán! Vào nhận đơn làm ngay.`;
             sendSystemNotification({
               title: '⚡ ĐƠN MỚI ĐÃ THANH TOÁN!',
               body: msg,
