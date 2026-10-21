@@ -128,20 +128,20 @@ export default function PaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/65 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto p-2 sm:p-4 bg-black/75 flex items-center justify-center animate-in fade-in duration-150 overscroll-none">
       <div
-        className="bg-white w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-gray-100"
+        className="bg-white w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] border border-gray-100 shrink-0"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="px-4 py-3 sm:px-5 sm:py-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white flex justify-between items-center relative">
+        {/* Header - luôn luôn hiển thị trên cùng không bị che khuất */}
+        <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white flex justify-between items-center relative shrink-0 sticky top-0 z-20">
           <div className="flex items-center gap-2">
             <div className="p-1.5 sm:p-2 bg-white/20 rounded-xl">
               <IconQrCode className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
             <div>
-              <h3 className="font-bold text-sm sm:text-lg leading-tight">Thanh toán chuyển khoản</h3>
-              <p className="text-[11px] sm:text-xs text-blue-100 mt-0.5">Quét mã QR qua ứng dụng ngân hàng</p>
+              <h3 className="font-bold text-sm sm:text-base leading-tight">Thanh toán chuyển khoản</h3>
+              <p className="text-[10px] sm:text-xs text-blue-100 mt-0.5">Quét mã QR qua ứng dụng ngân hàng</p>
             </div>
           </div>
           <button
@@ -154,7 +154,7 @@ export default function PaymentModal({
         </div>
 
         {/* Content */}
-        <div className="p-3.5 sm:p-5 overflow-y-auto space-y-3 sm:space-y-4">
+        <div className="p-3.5 sm:p-5 overflow-y-auto flex-1 overscroll-contain space-y-3 sm:space-y-4">
           {timeLeft <= 0 ? (
             <div className="py-6 px-3 text-center space-y-4">
               <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">

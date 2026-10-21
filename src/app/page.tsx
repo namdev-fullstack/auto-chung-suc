@@ -338,7 +338,7 @@ export default function Home() {
                   autoCorrect="off"
                   autoCapitalize="none"
                   spellCheck={false}
-                  className={`w-full px-3.5 py-3 bg-slate-50 border rounded-xl focus:bg-white text-sm font-medium transition-all ${
+                  className={`w-full px-3.5 py-3 bg-slate-50 border rounded-xl focus:bg-white text-base sm:text-sm font-medium transition-all ${
                     inputError
                       ? 'border-red-500 ring-2 ring-red-500/20 bg-red-50/20 focus:border-red-500 focus:ring-red-500/30'
                       : 'border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'

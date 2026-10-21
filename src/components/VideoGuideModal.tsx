@@ -111,16 +111,16 @@ export default function VideoGuideModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 overflow-y-auto p-2 sm:p-5 bg-black/80 flex items-center justify-center animate-in fade-in duration-150 overscroll-none"
       onClick={onClose}
     >
       <div
         ref={containerRef}
         onClick={(e) => e.stopPropagation()}
-        className="bg-slate-900 text-white w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-slate-700/80 max-h-[90vh]"
+        className="bg-slate-900 text-white w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] border border-slate-700/80 shrink-0"
       >
         {/* Header Modal */}
-        <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-800 border-b border-slate-700/80 flex items-center justify-between gap-3">
+        <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-800 border-b border-slate-700/80 flex items-center justify-between gap-3 shrink-0 sticky top-0 z-20">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-lg">🎬</span>
             <h3 className="font-bold text-sm sm:text-base text-white truncate">
